@@ -31,7 +31,9 @@ impl RotaryEmbedding {
             .collect();
         let inv_freq = Tensor::new(inv_freq.as_slice(), device)?;
         let t = Tensor::arange(0u32, max_seq_len as u32, device)?.to_dtype(DType::F32)?;
-        let freqs = t.reshape((max_seq_len, 1))?.matmul(&inv_freq.reshape((1, inv_freq.dims()[0]))?)?;
+        let freqs = t
+            .reshape((max_seq_len, 1))?
+            .matmul(&inv_freq.reshape((1, inv_freq.dims()[0]))?)?;
         let sin = freqs.sin()?;
         let cos = freqs.cos()?;
         Ok(Self { sin, cos })
@@ -42,19 +44,19 @@ impl RotaryEmbedding {
         let (b_sz, seq_len, n_heads, head_dim) = x.dims4()?;
         let cos = self.cos.narrow(0, index, seq_len)?;
         let sin = self.sin.narrow(0, index, seq_len)?;
-        
+
         // Split x into real and imaginary parts (even and odd indices)
         let x1 = x.narrow(3, 0, head_dim / 2)?;
         let x2 = x.narrow(3, head_dim / 2, head_dim / 2)?;
-        
+
         // cos and sin are (seq_len, head_dim / 2)
         // Reshape for broadcasting: (1, seq_len, 1, head_dim / 2)
         let cos = cos.reshape((1, seq_len, 1, head_dim / 2))?;
         let sin = sin.reshape((1, seq_len, 1, head_dim / 2))?;
-        
+
         let out1 = (x1.broadcast_mul(&cos)?).broadcast_sub(&x2.broadcast_mul(&sin)?)?;
         let out2 = (x1.broadcast_mul(&sin)?).broadcast_add(&x2.broadcast_mul(&cos)?)?;
-        
+
         Tensor::cat(&[out1, out2], 3)
     }
 }

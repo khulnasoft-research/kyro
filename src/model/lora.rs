@@ -29,7 +29,7 @@ impl LoraLinear {
 
     pub fn forward(&self, x: &Tensor, adapter_id: Option<&str>) -> Result<Tensor> {
         let base_out = self.base.forward(x)?;
-        
+
         if let Some(id) = adapter_id {
             if let Some(adapter) = self.adapters.get(id) {
                 // lora_out = base_out + (x @ A.T @ B.T) * (alpha / rank)
@@ -39,7 +39,7 @@ impl LoraLinear {
                 return base_out.broadcast_add(&(lora_out * scaling)?);
             }
         }
-        
+
         Ok(base_out)
     }
 }

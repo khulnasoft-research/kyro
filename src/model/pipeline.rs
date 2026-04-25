@@ -10,7 +10,7 @@ impl PipelineContext {
         let layers_per_gpu = (total_layers + world_size - 1) / world_size;
         let start_layer = rank * layers_per_gpu;
         let end_layer = std::cmp::min(start_layer + layers_per_gpu, total_layers);
-        
+
         Self {
             rank,
             world_size,

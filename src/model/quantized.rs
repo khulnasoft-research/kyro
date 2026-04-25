@@ -1,6 +1,6 @@
 use candle_core::{Device, Result, Tensor};
-use candle_transformers::quantized_nn::Linear;
 use candle_transformers::models::quantized_llama::ModelWeights;
+use candle_transformers::quantized_nn::Linear;
 use std::path::Path;
 
 pub struct QuantizedLlama {

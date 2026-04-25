@@ -1,5 +1,5 @@
-use candle_core::{Result, Tensor, Device};
-use candle_nn::{Linear, Module, Conv2d, Conv2dConfig};
+use candle_core::{Device, Result, Tensor};
+use candle_nn::{Conv2d, Conv2dConfig, Linear, Module};
 
 pub struct VisionEncoder {
     pub patch_embed: Conv2d,
