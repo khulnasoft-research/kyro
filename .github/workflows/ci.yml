@@ -56,6 +56,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: kyro-engine:latest
+          tags: kyro:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
