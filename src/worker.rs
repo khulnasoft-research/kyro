@@ -130,7 +130,11 @@ impl Worker {
                 let mut scheduler = self.scheduler.lock().await;
 
                 for res in results {
-                    if let Some(req) = scheduler.running_queue.iter_mut().find(|r| r.id == res.req_id) {
+                    if let Some(req) = scheduler
+                        .running_queue
+                        .iter_mut()
+                        .find(|r| r.id == res.req_id)
+                    {
                         req.generated_tokens.push(res.token);
                         if let Some(sender) = &req.token_sender {
                             let _ = sender.send(res.token);

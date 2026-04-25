@@ -118,7 +118,7 @@ pub async fn chat_completions(
         grammar_processor: None,
     };
 
-// Add request to scheduler
+    // Add request to scheduler
     {
         let mut sched = state.scheduler.lock().await;
         sched.add_request(request);
