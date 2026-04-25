@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::scheduler::continuous_batching::{Request, Scheduler};
 use axum::{
     extract::State,
@@ -8,10 +10,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
-use std::convert::Infallible;
-use std::sync::Arc;
+use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Mutex, Notify};
 
 pub struct AppState {
@@ -26,6 +26,7 @@ impl AppState {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub stream: Option<bool>,
