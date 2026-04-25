@@ -1,5 +1,5 @@
 # --- Stage 1: Builder ---
-FROM rust:1.75-slim-bookworm as builder
+FROM rustlang/rust:nightly-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
