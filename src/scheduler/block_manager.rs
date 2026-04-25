@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::scheduler::radix_cache::RadixCache;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(pub usize);
@@ -51,8 +51,7 @@ impl BlockManager {
         prompt_tokens: &[u32],
     ) -> Option<(Vec<BlockId>, usize)> {
         // 1. Check Radix Cache for prefix hit
-        let (cached_blocks, cached_token_count) =
-            self.radix_cache.match_prefix(prompt_tokens);
+        let (cached_blocks, cached_token_count) = self.radix_cache.match_prefix(prompt_tokens);
 
         // Increment ref count for cached blocks
         for block in &cached_blocks {
@@ -118,7 +117,7 @@ impl BlockManager {
     pub fn free(&mut self, request_id: u64) {
         if let Some(blocks) = self.block_table.remove(&request_id) {
             let tokens = self.prompt_table.remove(&request_id);
-            
+
             for block in &blocks {
                 self.ref_counts[block.0] -= 1;
             }

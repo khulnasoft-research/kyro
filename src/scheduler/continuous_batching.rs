@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use crate::scheduler::block_manager::BlockManager;
+use std::collections::VecDeque;
 
 pub struct Request {
     pub id: u64,
@@ -74,12 +74,14 @@ impl Scheduler {
         // 2. Add Prefills (Compute Bound), but chunked
         // First, check already running prefill requests
         for req in &mut self.running_queue {
-            if total_tokens >= self.config.max_tokens_per_iter { break; }
-            
+            if total_tokens >= self.config.max_tokens_per_iter {
+                break;
+            }
+
             if req.prefill_cursor < req.prompt_tokens.len() {
                 let remaining = req.prompt_tokens.len() - req.prefill_cursor;
                 let chunk_size = std::cmp::min(remaining, self.config.max_prefill_chunk_size);
-                
+
                 req.is_prefill = true;
                 to_prefill.push(req.id);
                 total_tokens += chunk_size;
@@ -88,7 +90,9 @@ impl Scheduler {
 
         // Second, pull new requests from waiting queue
         while let Some(req) = self.waiting_queue.front() {
-            if total_tokens >= self.config.max_tokens_per_iter { break; }
+            if total_tokens >= self.config.max_tokens_per_iter {
+                break;
+            }
 
             let tokens = req.prompt_tokens.clone();
             if let Some((_blocks, cached_len)) =
@@ -97,10 +101,10 @@ impl Scheduler {
                 let mut req = self.waiting_queue.pop_front().unwrap();
                 req.cached_prefix_len = cached_len;
                 req.prefill_cursor = cached_len;
-                
+
                 let remaining = req.prompt_tokens.len() - req.prefill_cursor;
                 let chunk_size = std::cmp::min(remaining, self.config.max_prefill_chunk_size);
-                
+
                 if remaining > 0 {
                     req.is_prefill = true;
                     to_prefill.push(req.id);
@@ -111,7 +115,7 @@ impl Scheduler {
                     to_decode.push(req.id);
                     total_tokens += 1;
                 }
-                
+
                 self.running_queue.push(req);
             } else {
                 break;
@@ -123,7 +127,8 @@ impl Scheduler {
 
     pub fn advance_prefill_cursor(&mut self, request_id: u64) {
         if let Some(req) = self.running_queue.iter_mut().find(|r| r.id == request_id) {
-            let next = (req.prefill_cursor + self.config.max_prefill_chunk_size).min(req.prompt_tokens.len());
+            let next = (req.prefill_cursor + self.config.max_prefill_chunk_size)
+                .min(req.prompt_tokens.len());
             req.prefill_cursor = next;
         }
     }
