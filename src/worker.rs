@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+
 use crate::metrics::EngineMetrics;
 use crate::model::loader::LoadedModel;
-use crate::scheduler::continuous_batching::{Request, Scheduler};
-use candle_core::{DType, Device, Result, Tensor};
+use crate::scheduler::continuous_batching::Scheduler;
+use candle_core::{Device, Result, Tensor};
 use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
@@ -31,7 +33,7 @@ impl Worker {
     pub async fn run_loop(&mut self, notify: Arc<Notify>) -> anyhow::Result<()> {
         loop {
             // Phase 1: Schedule (short lock hold)
-            let (to_prefill, to_decode, mut work_batch) = {
+            let (to_prefill, _, mut work_batch) = {
                 let mut scheduler = self.scheduler.lock().await;
                 let (to_prefill, to_decode) = scheduler.schedule();
 
@@ -115,7 +117,7 @@ impl Worker {
                 let next_token = if !logits.dims().is_empty() && logits.dims()[0] > 0 {
                     self.sample(&logits, item.temperature, item.top_p)?
                 } else {
-                    rand::thread_rng().gen_range(0..100)
+                    rand::rng().random_range(0..100)
                 };
 
                 results.push(ComputeResult {
@@ -168,7 +170,7 @@ impl Worker {
         let dims = logits.dims();
 
         if dims.is_empty() || dims.iter().all(|&d| d == 0) {
-            return Ok(rand::thread_rng().gen_range(0..100));
+            return Ok(rand::rng().random_range(0..100));
         }
 
         let logits = if dims.len() == 1 {
@@ -177,24 +179,24 @@ impl Worker {
             logits.get(0)?
         };
 
-        let mut logits = match logits.flatten_all() {
+        let logits = match logits.flatten_all() {
             Ok(l) => l,
-            Err(_) => return Ok(rand::thread_rng().gen_range(0..100)),
+            Err(_) => return Ok(rand::rng().random_range(0..100)),
         };
 
         if temperature <= 0.0 {
             return if logits.dims()[0] > 0 {
                 Ok(logits.argmax(0)?.to_scalar::<u32>()?)
             } else {
-                Ok(rand::thread_rng().gen_range(0..100))
+                Ok(rand::rng().random_range(0..100))
             };
         }
 
         let logits = (&logits / (temperature as f64))?;
         let prs = candle_nn::ops::softmax(&logits, 0)?;
-        let mut prs: Vec<f32> = match prs.to_vec1() {
+        let prs: Vec<f32> = match prs.to_vec1() {
             Ok(p) if !p.is_empty() => p,
-            _ => return Ok(rand::thread_rng().gen_range(0..100)),
+            _ => return Ok(rand::rng().random_range(0..100)),
         };
 
         if top_p < 1.0 {
@@ -213,8 +215,8 @@ impl Worker {
             indexed_prs.truncate(cut_off);
 
             let total_p: f32 = indexed_prs.iter().map(|(_, p)| p).sum();
-            let mut rng = rand::thread_rng();
-            let mut r: f32 = rng.gen::<f32>() * total_p;
+            let mut rng = rand::rng();
+            let mut r: f32 = rng.random::<f32>() * total_p;
 
             for (id, p) in &indexed_prs {
                 r -= p;
@@ -224,8 +226,8 @@ impl Worker {
             }
             Ok(indexed_prs[0].0 as u32)
         } else {
-            let mut rng = rand::thread_rng();
-            let mut r: f32 = rng.gen::<f32>();
+            let mut rng = rand::rng();
+            let mut r: f32 = rng.random::<f32>();
             for (id, &p) in prs.iter().enumerate() {
                 r -= p;
                 if r <= 0.0 {

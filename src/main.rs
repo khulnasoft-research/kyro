@@ -9,7 +9,6 @@ mod worker;
 
 use crate::distributed::DistributedContext;
 use crate::model::loader::LoadedModel;
-use crate::model::pipeline::PipelineContext;
 use crate::scheduler::block_manager::BlockManager;
 use crate::scheduler::continuous_batching::Scheduler;
 use crate::worker::Worker;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use prometheus::{Counter, Gauge, Histogram, Registry};
 use std::sync::Arc;

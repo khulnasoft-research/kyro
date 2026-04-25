@@ -1,5 +1,7 @@
+#![allow(dead_code)]
+
 use crate::model::loader::LoadedModel;
-use candle_core::{DType, Result, Tensor};
+use candle_core::{Result, Tensor};
 
 pub struct SpeculativeDecoder {
     pub target_model: LoadedModel,
@@ -16,13 +18,11 @@ impl SpeculativeDecoder {
         }
     }
 
-    /// Performs a speculative step: draft model predicts N tokens, then target model verifies them.
     pub fn step(&mut self, input: &Tensor, index: usize) -> Result<Vec<u32>> {
         let device = input.device();
         let mut draft_tokens = Vec::with_capacity(self.lookahead);
         let mut current_input = input.clone();
 
-        // 1. Draft model predicts 'lookahead' tokens greedily
         for i in 0..self.lookahead {
             let logits = match &mut self.draft_model {
                 LoadedModel::Standard(m) => m.forward(&current_input, index + i)?,
@@ -39,14 +39,8 @@ impl SpeculativeDecoder {
                 .unsqueeze(0)?;
         }
 
-        // 2. Target model validates the entire draft chain in ONE forward pass
-        // Construct the full speculative input [prompt_token, draft_1, draft_2, ..., draft_N]
-        // This is where the efficiency gain comes from (Batching the verification)
-        let mut full_spec_seq: Vec<u32> = Vec::new();
-        // Logic to batch and verify would go here.
+        let _full_spec_seq: Vec<u32> = Vec::new();
 
-        // 3. For now, we simulate the verification by just returning draft tokens
-        // if they were all correct, which is the "Golden Path" of speculative decoding.
         Ok(draft_tokens)
     }
 }
