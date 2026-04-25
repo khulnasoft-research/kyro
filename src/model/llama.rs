@@ -1,12 +1,15 @@
+#![allow(dead_code)]
+
 use crate::distributed::DistributedContext;
 use crate::model::attention_kernel::PagedAttention;
 use crate::model::config::LlamaConfig;
 use crate::model::layers::{RmsNorm, RotaryEmbedding};
 use crate::model::pipeline::PipelineContext;
-use candle_core::{DType, Device, Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 use candle_nn::{Module, VarBuilder};
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct LlamaAttention {
     q_proj: candle_nn::Linear,
     k_proj: candle_nn::Linear,
@@ -16,8 +19,10 @@ pub struct LlamaAttention {
     n_heads: usize,
     n_kv_heads: usize,
     pub head_dim: usize,
-    pub dist: Arc<DistributedContext>,
-    pub paged_attn: PagedAttention,
+    #[allow(dead_code)]
+    dist: Arc<DistributedContext>,
+    #[allow(dead_code)]
+    paged_attn: PagedAttention,
 }
 
 impl LlamaAttention {
@@ -83,10 +88,12 @@ impl LlamaAttention {
     }
 }
 
+#[allow(dead_code)]
 pub struct LlamaMLP {
     gate_proj: candle_nn::Linear,
     up_proj: candle_nn::Linear,
     down_proj: candle_nn::Linear,
+    #[allow(dead_code)]
     dist: Arc<DistributedContext>,
 }
 
@@ -159,6 +166,7 @@ impl LlamaDecoderLayer {
     }
 }
 
+#[allow(dead_code)]
 pub struct LlamaModel {
     embed_tokens: Option<candle_nn::Embedding>,
     layers: Vec<LlamaDecoderLayer>,

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use candle_core::{Result, Tensor, D};
 use candle_nn::{Linear, Module};
 

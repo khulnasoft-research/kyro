@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::QuantizedLayer;
 use candle_core::{DType, Result, Tensor};
 
