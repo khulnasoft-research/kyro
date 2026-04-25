@@ -1,17 +1,33 @@
+use crate::scheduler::continuous_batching::{Request, Scheduler};
 use axum::{
     extract::State,
-    response::{sse::{Event, Sse}, IntoResponse},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::scheduler::continuous_batching::{Scheduler, Request};
 use futures::stream::Stream;
+use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
+use std::sync::Arc;
+use tokio::sync::{Mutex, Notify};
+
+pub struct AppState {
+    pub scheduler: Arc<Mutex<Scheduler>>,
+    pub notify: Arc<Notify>,
+}
+
+impl AppState {
+    pub fn new(scheduler: Arc<Mutex<Scheduler>>, notify: Arc<Notify>) -> Self {
+        Self { scheduler, notify }
+    }
+}
 
 #[derive(Debug, Deserialize)]
+pub struct ChatCompletionRequest {
+    pub model: String,
     pub stream: Option<bool>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
@@ -82,12 +98,12 @@ pub struct Delta {
 }
 
 pub async fn chat_completions(
-    State(scheduler): State<Arc<Mutex<Scheduler>>>,
+    State(state): State<Arc<AppState>>,
     Json(payload): Json<ChatCompletionRequest>,
 ) -> impl IntoResponse {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
     let request_id = rand::random::<u64>();
-    
+
     let request = Request {
         id: request_id,
         prompt_tokens: vec![1, 2, 3], // TODO: Use real tokenizer
@@ -99,12 +115,15 @@ pub async fn chat_completions(
         temperature: payload.temperature.unwrap_or(1.0),
         top_p: payload.top_p.unwrap_or(1.0),
         token_sender: Some(tx),
+        grammar_processor: None,
     };
 
+// Add request to scheduler
     {
-        let mut sched = scheduler.lock().await;
+        let mut sched = state.scheduler.lock().await;
         sched.add_request(request);
     }
+    state.notify.notify_one();
 
     if payload.stream.unwrap_or(false) {
         let stream = async_stream::stream! {
@@ -142,17 +161,18 @@ pub async fn chat_completions(
                 index: 0,
                 message: Message {
                     role: "assistant".to_string(),
-                    content: full_content,
+                    content: MessageContent::Text(full_content),
                 },
                 finish_reason: "stop".to_string(),
             }],
-        }).into_response()
+        })
+        .into_response()
     }
 }
 
-pub fn app(scheduler: Arc<Mutex<Scheduler>>) -> Router {
+pub fn app(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/v1/chat/completions", post(chat_completions))
         .route("/health", get(|| async { "OK" }))
-        .with_state(scheduler)
+        .with_state(state)
 }

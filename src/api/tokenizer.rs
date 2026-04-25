@@ -1,6 +1,6 @@
-use tokenizers::Tokenizer;
 use anyhow::Result;
 use std::path::Path;
+use tokenizers::Tokenizer;
 
 pub struct LuminaTokenizer {
     tokenizer: Tokenizer,
@@ -13,12 +13,18 @@ impl LuminaTokenizer {
     }
 
     pub fn encode(&self, text: &str) -> Result<Vec<u32>> {
-        let encoding = self.tokenizer.encode(text, true).map_err(|e| anyhow::anyhow!(e))?;
+        let encoding = self
+            .tokenizer
+            .encode(text, true)
+            .map_err(|e| anyhow::anyhow!(e))?;
         Ok(encoding.get_ids().to_vec())
     }
 
     pub fn decode(&self, tokens: &[u32]) -> Result<String> {
-        let decoded = self.tokenizer.decode(tokens, true).map_err(|e| anyhow::anyhow!(e))?;
+        let decoded = self
+            .tokenizer
+            .decode(tokens, true)
+            .map_err(|e| anyhow::anyhow!(e))?;
         Ok(decoded)
     }
 }

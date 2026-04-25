@@ -45,7 +45,7 @@ impl GrammarLogitsProcessor {
         }
 
         let mask = Tensor::from_vec(mask_data, (vocab_size,), logits.device())?;
-        
+
         // 3. Add the mask to logits (valid tokens + 0, invalid tokens + -inf)
         logits.broadcast_add(&mask)
     }
@@ -54,7 +54,7 @@ impl GrammarLogitsProcessor {
         // In a production implementation like XGrammar, this would:
         // 1. Advance the CFG parser with 'self.state.current_text'
         // 2. Query the trie for tokens that match the next valid transitions.
-        
+
         // Simplified: allow all tokens for now, but provide the entry point for masking.
         (0..vocab_size).collect()
     }
