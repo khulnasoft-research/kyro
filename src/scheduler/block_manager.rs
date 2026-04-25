@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::scheduler::radix_cache::RadixCache;
 use std::collections::HashMap;
 
@@ -60,7 +62,7 @@ impl BlockManager {
 
         // 2. Calculate how many NEW blocks we need (beyond the cache hit)
         let remaining_tokens = prompt_tokens.len().saturating_sub(cached_token_count);
-        let new_blocks_needed = (remaining_tokens + self.block_size - 1) / self.block_size;
+        let new_blocks_needed = remaining_tokens.div_ceil(self.block_size);
 
         // 3. Check we have enough free GPU blocks for the remainder
         // First try to evict from the radix cache if needed
@@ -98,7 +100,7 @@ impl BlockManager {
 
     /// Legacy allocate (no prefix caching). Kept for compatibility.
     pub fn allocate(&mut self, request_id: u64, num_tokens: usize) -> Option<Vec<BlockId>> {
-        let num_blocks = (num_tokens + self.block_size - 1) / self.block_size;
+        let num_blocks = num_tokens.div_ceil(self.block_size);
         if self.free_gpu_blocks.len() < num_blocks {
             return None;
         }

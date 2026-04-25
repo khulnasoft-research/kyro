@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::scheduler::block_manager::BlockManager;
 use std::collections::VecDeque;
 

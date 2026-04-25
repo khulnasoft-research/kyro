@@ -89,11 +89,11 @@ impl RadixCache {
         while token_idx < tokens.len() {
             let first_token = tokens[token_idx];
 
-            if !current_node.children.contains_key(&first_token) {
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                current_node.children.entry(first_token)
+            {
                 let new_node = RadixNode::new(tokens[token_idx..].to_vec(), block_ids.to_vec());
-                current_node
-                    .children
-                    .insert(first_token, Box::new(new_node));
+                e.insert(Box::new(new_node));
                 self.num_cached_blocks += block_ids.len();
                 break;
             }
@@ -136,11 +136,9 @@ impl RadixCache {
         let mut oldest_time = Instant::now();
 
         for (token, child) in &node.children {
-            if child.children.is_empty() {
-                if child.last_accessed < oldest_time {
-                    oldest_time = child.last_accessed;
-                    oldest_token = Some(*token);
-                }
+            if child.children.is_empty() && child.last_accessed < oldest_time {
+                oldest_time = child.last_accessed;
+                oldest_token = Some(*token);
             }
         }
 
