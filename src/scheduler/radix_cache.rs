@@ -1,6 +1,6 @@
+use crate::scheduler::block_manager::BlockId;
 use std::collections::HashMap;
 use std::time::Instant;
-use crate::scheduler::block_manager::BlockId;
 
 #[derive(Debug)]
 struct RadixNode {
@@ -52,10 +52,12 @@ impl RadixCache {
         let mut token_idx = 0;
         while token_idx < tokens.len() {
             let first_token = tokens[token_idx];
-            
+
             if let Some(child) = current_node.children.get_mut(&first_token) {
                 // Check if the rest of the child's tokens match
-                let match_len = child.tokens.iter()
+                let match_len = child
+                    .tokens
+                    .iter()
                     .zip(&tokens[token_idx..])
                     .take_while(|(a, b)| a == b)
                     .count();
@@ -86,22 +88,21 @@ impl RadixCache {
 
         while token_idx < tokens.len() {
             let first_token = tokens[token_idx];
-            
-            if !current_node.children.contains_key(&first_token) {
-                let new_node = RadixNode::new(
-                    tokens[token_idx..].to_vec(),
-                    block_ids.to_vec()
-                );
-                current_node.children.insert(first_token, Box::new(new_node));
+
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                current_node.children.entry(first_token)
+            {
+                let new_node = RadixNode::new(tokens[token_idx..].to_vec(), block_ids.to_vec());
+                e.insert(Box::new(new_node));
                 self.num_cached_blocks += block_ids.len();
                 break;
             }
-            
+
             let child = current_node.children.get_mut(&first_token).unwrap();
             token_idx += child.tokens.len();
             current_node = child;
         }
-        
+
         if self.num_cached_blocks > self.max_capacity {
             self.evict_lru();
         }
@@ -109,17 +110,24 @@ impl RadixCache {
 
     pub fn evict_lru(&mut self) -> Vec<BlockId> {
         let mut blocks_to_free = Vec::new();
-        while self.num_cached_blocks > self.max_capacity {
-            if let Some((token, evicted_blocks)) = self.remove_oldest_leaf(&mut self.root) {
-                blocks_to_free.extend(evicted_blocks);
-            } else {
-                break;
+        loop {
+            let blocks = self.remove_oldest_leaf();
+            match blocks {
+                Some(evicted_blocks) => {
+                    self.num_cached_blocks -= evicted_blocks.len();
+                    blocks_to_free.extend(evicted_blocks);
+                    if self.num_cached_blocks <= self.max_capacity {
+                        break;
+                    }
+                }
+                None => break,
             }
         }
         blocks_to_free
     }
 
-    fn remove_oldest_leaf(&mut self, node: &mut RadixNode) -> Option<(u32, Vec<BlockId>)> {
+    fn remove_oldest_leaf(&mut self) -> Option<Vec<BlockId>> {
+        let node = &mut self.root;
         if node.children.is_empty() {
             return None;
         }
@@ -128,21 +136,15 @@ impl RadixCache {
         let mut oldest_time = Instant::now();
 
         for (token, child) in &node.children {
-            if child.children.is_empty() {
-                if child.last_accessed < oldest_time {
-                    oldest_time = child.last_accessed;
-                    oldest_token = Some(*token);
-                }
-            } else {
-                // Recursively find leaf in children
-                // (Simplified for this pass)
+            if child.children.is_empty() && child.last_accessed < oldest_time {
+                oldest_time = child.last_accessed;
+                oldest_token = Some(*token);
             }
         }
 
         if let Some(token) = oldest_token {
             let child = node.children.remove(&token).unwrap();
-            self.num_cached_blocks -= child.block_ids.len();
-            Some((token, child.block_ids))
+            Some(child.block_ids)
         } else {
             None
         }

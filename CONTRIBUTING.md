@@ -20,7 +20,7 @@ Thank you for your interest in Kyro! We welcome contributions from the community
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/kyro.git
+git clone https://github.com/nrelab/kyro.git
 cd kyro
 
 # Build for development

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub struct PipelineContext {
     pub rank: usize,
     pub world_size: usize,
@@ -7,10 +9,10 @@ pub struct PipelineContext {
 
 impl PipelineContext {
     pub fn new(rank: usize, world_size: usize, total_layers: usize) -> Self {
-        let layers_per_gpu = (total_layers + world_size - 1) / world_size;
+        let layers_per_gpu = total_layers.div_ceil(world_size);
         let start_layer = rank * layers_per_gpu;
         let end_layer = std::cmp::min(start_layer + layers_per_gpu, total_layers);
-        
+
         Self {
             rank,
             world_size,

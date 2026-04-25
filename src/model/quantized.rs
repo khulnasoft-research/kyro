@@ -1,11 +1,12 @@
+#![allow(dead_code)]
+
 use candle_core::{Device, Result, Tensor};
-use candle_transformers::quantized_nn::Linear;
 use candle_transformers::models::quantized_llama::ModelWeights;
 use std::path::Path;
 
 pub struct QuantizedLlama {
     pub inner: ModelWeights,
-    pub device: Device,
+    device: Device,
 }
 
 impl QuantizedLlama {

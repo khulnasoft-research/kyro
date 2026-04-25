@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
+use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
-use anyhow::Result;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LlamaConfig {

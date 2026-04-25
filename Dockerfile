@@ -1,5 +1,5 @@
 # --- Stage 1: Builder ---
-FROM rust:1.75-slim-bookworm as builder
+FROM rustlang/rust:nightly-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /usr/src/kyro/target/release/kyro-engine /usr/local/bin/kyro-engine
+COPY --from=builder /usr/src/kyro/target/release/kyro /usr/local/bin/kyro
 
 # Expose API port
 EXPOSE 3000
@@ -46,4 +46,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
 # Run the engine
-ENTRYPOINT ["kyro-engine"]
+ENTRYPOINT ["kyro"]
