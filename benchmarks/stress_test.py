@@ -7,7 +7,7 @@ API_URL = "http://localhost:3000/v1/chat/completions"
 CONCURRENT_USERS = 50
 REQUESTS_PER_USER = 10
 
-async fn send_request(session, user_id):
+async def send_request(session, user_id):
     payload = {
         "model": "kyro-llama3",
         "messages": [{"role": "user", "content": f"Hello from user {user_id}"}],
@@ -20,7 +20,7 @@ async fn send_request(session, user_id):
         end_time = time.perf_counter()
         return end_time - start_time
 
-async fn stress_test():
+async def stress_test():
     print(f"Starting stress test with {CONCURRENT_USERS} concurrent users...")
     
     async with aiohttp.ClientSession() as session:
