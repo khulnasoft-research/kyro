@@ -2,6 +2,8 @@
 name = "kyro"
 version = "0.1.0"
 edition = "2021"
+description = "A high-performance ML inference engine"
+license = "MIT"
 
 [dependencies]
 candle-core = "0.10.2"
