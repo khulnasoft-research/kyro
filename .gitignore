@@ -1,0 +1,28 @@
+# Rust
+/target
+Cargo.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models & Data
+*.safetensors
+*.bin
+*.gguf
+*.pt
+/models/
+/cache/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
