@@ -1895,7 +1895,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kyro-engine"
+name = "kyro"
 version = "0.1.0"
 dependencies = [
  "anyhow",
