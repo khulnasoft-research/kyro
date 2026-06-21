@@ -1,16 +1,14 @@
-#![allow(dead_code)]
-
 use crate::metrics::EngineMetrics;
 use crate::model::loader::LoadedModel;
 use crate::scheduler::continuous_batching::Scheduler;
 use candle_core::{Device, Result, Tensor};
 use rand::Rng;
 use std::sync::Arc;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{RwLock, Notify};
 
 pub struct Worker {
     pub model: LoadedModel,
-    pub scheduler: Arc<Mutex<Scheduler>>,
+    pub scheduler: Arc<RwLock<Scheduler>>,
     pub device: Device,
     pub metrics: Arc<EngineMetrics>,
 }
@@ -18,7 +16,7 @@ pub struct Worker {
 impl Worker {
     pub fn new(
         model: LoadedModel,
-        scheduler: Arc<Mutex<Scheduler>>,
+        scheduler: Arc<RwLock<Scheduler>>,
         device: Device,
         metrics: Arc<EngineMetrics>,
     ) -> Self {
@@ -32,9 +30,9 @@ impl Worker {
 
     pub async fn run_loop(&mut self, notify: Arc<Notify>) -> anyhow::Result<()> {
         loop {
-            // Phase 1: Schedule (short lock hold)
+            // Phase 1: Schedule (short write lock hold)
             let (to_prefill, _, mut work_batch) = {
-                let mut scheduler = self.scheduler.lock().await;
+                let mut scheduler = self.scheduler.write().await;
                 let (to_prefill, to_decode) = scheduler.schedule();
 
                 if to_prefill.is_empty() && to_decode.is_empty() {
@@ -54,10 +52,8 @@ impl Worker {
                             .min(req.prompt_tokens.len());
 
                         if chunk_start < req.prompt_tokens.len() {
-                            let chunk_tokens: Vec<f32> = req.prompt_tokens[chunk_start..chunk_end]
-                                .iter()
-                                .map(|&x| x as f32)
-                                .collect();
+                            let chunk_tokens: Vec<u32> =
+                                req.prompt_tokens[chunk_start..chunk_end].to_vec();
                             batch.push(WorkItem {
                                 req_id: *req_id,
                                 input: chunk_tokens,
@@ -67,8 +63,8 @@ impl Worker {
                                 is_prefill: true,
                             });
                         } else if req.cached_prefix_len == req.prompt_tokens.len() {
-                            let last_token: f32 =
-                                req.prompt_tokens.last().map(|&x| x as f32).unwrap_or(0.0);
+                            let last_token =
+                                req.prompt_tokens.last().copied().unwrap_or(0);
                             batch.push(WorkItem {
                                 req_id: *req_id,
                                 input: vec![last_token],
@@ -83,11 +79,11 @@ impl Worker {
 
                 for req_id in &to_decode {
                     if let Some(req) = scheduler.running_queue.iter().find(|r| r.id == *req_id) {
-                        let last_token: f32 = req
+                        let last_token = req
                             .generated_tokens
                             .last()
-                            .map(|&x| x as f32)
-                            .unwrap_or(0.0);
+                            .copied()
+                            .unwrap_or(0);
                         batch.push(WorkItem {
                             req_id: *req_id,
                             input: vec![last_token],
@@ -106,8 +102,7 @@ impl Worker {
             let mut results = Vec::with_capacity(work_batch.len());
             for item in work_batch.drain(..) {
                 let input = Tensor::new(item.input.as_slice(), &self.device)?
-                    .unsqueeze(0)?
-                    .to_dtype(candle_core::DType::F32)?;
+                    .unsqueeze(0)?;
 
                 let logits = match &mut self.model {
                     LoadedModel::Standard(m) => m.forward(&input, 0)?,
@@ -127,9 +122,9 @@ impl Worker {
                 });
             }
 
-            // Phase 3: Update scheduler state (short lock hold)
+            // Phase 3: Update scheduler state (short write lock hold)
             {
-                let mut scheduler = self.scheduler.lock().await;
+                let mut scheduler = self.scheduler.write().await;
 
                 for res in results {
                     if let Some(req) = scheduler
@@ -167,6 +162,11 @@ impl Worker {
     }
 
     fn sample(&self, logits: &Tensor, temperature: f32, top_p: f32) -> Result<u32> {
+        sample_token(logits, temperature, top_p)
+    }
+}
+
+pub fn sample_token(logits: &Tensor, temperature: f32, top_p: f32) -> Result<u32> {
         let dims = logits.dims();
 
         if dims.is_empty() || dims.iter().all(|&d| d == 0) {
@@ -237,19 +237,99 @@ impl Worker {
             Ok((prs.len() - 1) as u32)
         }
     }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_core::Device;
+
+    #[test]
+    fn test_sample_argmax_with_zero_temp() {
+        let device = Device::Cpu;
+        // Logits where token 5 has the highest value
+        let logits = Tensor::from_slice(
+            &[0.1_f32, 0.2, 0.3, 0.4, 0.5, 10.0, 0.1, 0.2],
+            &[1, 8],
+            &device,
+        )
+        .unwrap();
+        let token = sample_token(&logits, 0.0, 1.0).unwrap();
+        assert_eq!(token, 5);
+    }
+
+    #[test]
+    fn test_sample_argmax_2d_no_batch() {
+        let device = Device::Cpu;
+        let logits = Tensor::from_slice(
+            &[1.0_f32, 2.0, 3.0, 0.5, 0.1],
+            &[1, 5],
+            &device,
+        )
+        .unwrap();
+        let token = sample_token(&logits, 0.0, 1.0).unwrap();
+        assert_eq!(token, 2);
+    }
+
+    #[test]
+    fn test_sample_1d_logits() {
+        let device = Device::Cpu;
+        let logits = Tensor::from_slice(&[0.1_f32, 0.2, 5.0, 0.4], &[4], &device).unwrap();
+        let token = sample_token(&logits, 0.0, 1.0).unwrap();
+        assert_eq!(token, 2);
+    }
+
+    #[test]
+    fn test_sample_with_temperature() {
+        let device = Device::Cpu;
+        let logits = Tensor::from_slice(
+            &[100.0_f32, 0.0, 0.0, 0.0, 0.0],
+            &[1, 5],
+            &device,
+        )
+        .unwrap();
+        // With high temperature, clear winner should still be token 0
+        let token = sample_token(&logits, 2.0, 1.0).unwrap();
+        assert_eq!(token, 0);
+    }
+
+    #[test]
+    fn test_sample_top_p_filters_low_prob_tokens() {
+        let device = Device::Cpu;
+        let logits = Tensor::from_slice(
+            &[100.0_f32, 0.0, 0.0, 0.0, 0.0],
+            &[1, 5],
+            &device,
+        )
+        .unwrap();
+        // top_p=0.5 should still include token 0 since it dominates
+        let token = sample_token(&logits, 1.0, 0.5).unwrap();
+        assert_eq!(token, 0);
+    }
+
+    #[test]
+    fn test_sample_empty_logits_fallback() {
+        let device = Device::Cpu;
+        let logits = Tensor::from_slice(&[] as &[f32], &[0], &device).unwrap();
+        let token = sample_token(&logits, 1.0, 1.0).unwrap();
+        // Should fall back to random 0..100
+        assert!(token < 100);
+    }
 }
 
 struct WorkItem {
     req_id: u64,
-    input: Vec<f32>,
+    input: Vec<u32>,
+    #[allow(dead_code)]
     is_last_chunk: bool,
     temperature: f32,
     top_p: f32,
+    #[allow(dead_code)]
     is_prefill: bool,
 }
 
 struct ComputeResult {
     req_id: u64,
     token: u32,
+    #[allow(dead_code)]
     is_last_chunk: bool,
 }
