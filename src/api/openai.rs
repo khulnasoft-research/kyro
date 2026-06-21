@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::scheduler::continuous_batching::{Request, Scheduler};
 use axum::{
     extract::State,
@@ -12,26 +10,26 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, sync::Arc};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{RwLock, Notify};
 
 pub struct AppState {
-    pub scheduler: Arc<Mutex<Scheduler>>,
+    pub scheduler: Arc<RwLock<Scheduler>>,
     pub notify: Arc<Notify>,
 }
 
 impl AppState {
-    pub fn new(scheduler: Arc<Mutex<Scheduler>>, notify: Arc<Notify>) -> Self {
+    pub fn new(scheduler: Arc<RwLock<Scheduler>>, notify: Arc<Notify>) -> Self {
         Self { scheduler, notify }
     }
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub stream: Option<bool>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    #[allow(dead_code)]
     pub top_k: Option<usize>,
 }
 
@@ -49,6 +47,7 @@ pub enum MessageContent {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[allow(dead_code)]
 pub struct ContentItem {
     #[serde(rename = "type")]
     pub item_type: String,
@@ -57,6 +56,7 @@ pub struct ContentItem {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[allow(dead_code)]
 pub struct ImageUrl {
     pub url: String,
 }
@@ -116,12 +116,13 @@ pub async fn chat_completions(
         temperature: payload.temperature.unwrap_or(1.0),
         top_p: payload.top_p.unwrap_or(1.0),
         token_sender: Some(tx),
+        deadline: Some(tokio::time::Instant::now() + tokio::time::Duration::from_secs(300)),
         grammar_processor: None,
     };
 
     // Add request to scheduler
     {
-        let mut sched = state.scheduler.lock().await;
+        let mut sched = state.scheduler.write().await;
         sched.add_request(request);
     }
     state.notify.notify_one();
