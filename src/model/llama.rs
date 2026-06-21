@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::distributed::DistributedContext;
 use crate::model::attention_kernel::PagedAttention;
 use crate::model::config::LlamaConfig;
@@ -44,7 +42,7 @@ impl LlamaAttention {
         let o_proj = candle_nn::linear(n_heads * head_dim, cfg.hidden_size, vb.pp("o_proj"))?;
 
         let rope = RotaryEmbedding::new(head_dim, 4096, device)?;
-        let paged_attn = PagedAttention::new(16, n_heads, head_dim); // 16 is block size
+        let paged_attn = PagedAttention::new(16, n_heads, head_dim, n_kv_heads); // 16 is block size
 
         Ok(Self {
             q_proj,
@@ -166,13 +164,14 @@ impl LlamaDecoderLayer {
     }
 }
 
-#[allow(dead_code)]
 pub struct LlamaModel {
     embed_tokens: Option<candle_nn::Embedding>,
     layers: Vec<LlamaDecoderLayer>,
     norm: Option<RmsNorm>,
     lm_head: Option<candle_nn::Linear>,
+    #[allow(dead_code)]
     device: Device,
+    #[allow(dead_code)]
     pipeline_ctx: PipelineContext,
 }
 
@@ -182,7 +181,8 @@ impl LlamaModel {
         vb: VarBuilder,
         device: &Device,
         dist: Arc<DistributedContext>,
-        pipeline_ctx: PipelineContext,
+    #[allow(dead_code)]
+    pipeline_ctx: PipelineContext,
     ) -> Result<Self> {
         let embed_tokens = if pipeline_ctx.is_first_stage() {
             Some(candle_nn::embedding(
@@ -256,6 +256,7 @@ impl LlamaModel {
         Ok(x)
     }
 
+    #[allow(dead_code)]
     pub fn dummy(cfg: &LlamaConfig) -> Result<Self> {
         Ok(Self {
             embed_tokens: None,
