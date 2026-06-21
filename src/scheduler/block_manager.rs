@@ -1,11 +1,10 @@
-#![allow(dead_code)]
-
 use crate::scheduler::radix_cache::RadixCache;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(pub usize);
 
+#[allow(dead_code)]
 pub struct PhysicalBlock {
     pub id: BlockId,
     pub device_id: usize,
@@ -14,9 +13,12 @@ pub struct PhysicalBlock {
 
 pub struct BlockManager {
     pub block_size: usize,
+    #[allow(dead_code)]
     pub num_gpu_blocks: usize,
+    #[allow(dead_code)]
     pub num_cpu_blocks: usize,
     pub free_gpu_blocks: Vec<BlockId>,
+    #[allow(dead_code)]
     pub free_cpu_blocks: Vec<BlockId>,
     pub block_table: HashMap<u64, Vec<BlockId>>, // request_id -> block_ids
     pub radix_cache: RadixCache,
@@ -99,6 +101,7 @@ impl BlockManager {
     }
 
     /// Legacy allocate (no prefix caching). Kept for compatibility.
+    #[allow(dead_code)]
     pub fn allocate(&mut self, request_id: u64, num_tokens: usize) -> Option<Vec<BlockId>> {
         let num_blocks = num_tokens.div_ceil(self.block_size);
         if self.free_gpu_blocks.len() < num_blocks {
@@ -140,5 +143,87 @@ impl BlockManager {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_manager(gpu_blocks: usize) -> BlockManager {
+        BlockManager::new(4, gpu_blocks, 2)
+    }
+
+    #[test]
+    fn test_allocate_with_prefix_no_cache() {
+        let mut bm = make_manager(10);
+        let tokens = vec![1, 2, 3, 4, 5];
+        let result = bm.allocate_with_prefix(1, &tokens);
+        assert!(result.is_some());
+        let (blocks, cached) = result.unwrap();
+        // 5 tokens, block_size=4 -> 2 blocks needed
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(cached, 0);
+        assert_eq!(bm.free_gpu_blocks.len(), 10 - 2);
+    }
+
+    #[test]
+    fn test_allocate_with_prefix_full_cache_hit() {
+        let mut bm = make_manager(10);
+        let tokens = vec![1, 2, 3, 4];
+        // First request populates cache
+        bm.allocate_with_prefix(1, &tokens);
+        bm.free(1);
+        // Second request should hit cache
+        let result = bm.allocate_with_prefix(2, &tokens);
+        assert!(result.is_some());
+        let (blocks, cached) = result.unwrap();
+        assert!(!blocks.is_empty());
+        assert_eq!(cached, 4);
+    }
+
+    #[test]
+    fn test_allocate_with_prefix_partial_cache_hit() {
+        let mut bm = make_manager(10);
+        let prefix = vec![1, 2];
+        let full = vec![1, 2, 3, 4, 5];
+        // Cache the prefix
+        bm.allocate_with_prefix(1, &prefix);
+        bm.free(1);
+        // Now request full sequence - should hit cache for first 2 tokens
+        let result = bm.allocate_with_prefix(2, &full);
+        assert!(result.is_some());
+        let (_blocks, cached) = result.unwrap();
+        assert_eq!(cached, 2);
+    }
+
+    #[test]
+    fn test_oom_returns_none() {
+        let mut bm = make_manager(1);
+        let tokens = vec![1, 2, 3, 4, 5];
+        let result = bm.allocate_with_prefix(1, &tokens);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_free_reuses_blocks() {
+        let mut bm = make_manager(10);
+        let tokens = vec![1, 2, 3, 4];
+        bm.allocate_with_prefix(1, &tokens);
+        let free_before = bm.free_gpu_blocks.len();
+        bm.free(1);
+        // After free, blocks go to cache, not free pool
+        assert_eq!(bm.free_gpu_blocks.len(), free_before);
+        assert!(bm.radix_cache.num_cached_blocks > 0);
+    }
+
+    #[test]
+    fn test_multiple_requests_unique_block_tables() {
+        let mut bm = make_manager(20);
+        bm.allocate_with_prefix(1, &[1, 2, 3, 4]);
+        bm.allocate_with_prefix(2, &[5, 6, 7, 8]);
+        assert!(bm.block_table.contains_key(&1));
+        assert!(bm.block_table.contains_key(&2));
+        assert_ne!(bm.block_table[&1], bm.block_table[&2]);
     }
 }

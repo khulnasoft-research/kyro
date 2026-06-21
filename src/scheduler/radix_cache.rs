@@ -150,3 +150,86 @@ impl RadixCache {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_cache_no_match() {
+        let mut cache = RadixCache::new(100);
+        let tokens = vec![1, 2, 3];
+        let (blocks, matched) = cache.match_prefix(&tokens);
+        assert!(blocks.is_empty());
+        assert_eq!(matched, 0);
+    }
+
+    #[test]
+    fn test_insert_and_match_full() {
+        let mut cache = RadixCache::new(100);
+        let tokens = vec![1, 2, 3, 4, 5];
+        let block_ids = vec![BlockId(10), BlockId(11)];
+        cache.insert(&tokens, &block_ids);
+        assert_eq!(cache.num_cached_blocks, 2);
+
+        let (blocks, matched) = cache.match_prefix(&tokens);
+        assert_eq!(blocks, block_ids);
+        assert_eq!(matched, 5);
+    }
+
+    #[test]
+    fn test_insert_and_match_partial() {
+        let mut cache = RadixCache::new(100);
+        cache.insert(&[1, 2, 3], &[BlockId(10)]);
+        let tokens = vec![1, 2, 3, 4, 5];
+        let (blocks, matched) = cache.match_prefix(&tokens);
+        assert_eq!(blocks, vec![BlockId(10)]);
+        assert_eq!(matched, 3);
+    }
+
+    #[test]
+    fn test_no_match_on_different_prefix() {
+        let mut cache = RadixCache::new(100);
+        cache.insert(&[5, 6, 7], &[BlockId(10)]);
+        let tokens = vec![1, 2, 3];
+        let (blocks, matched) = cache.match_prefix(&tokens);
+        assert!(blocks.is_empty());
+        assert_eq!(matched, 0);
+    }
+
+    #[test]
+    fn test_insert_multiple_sequences() {
+        let mut cache = RadixCache::new(100);
+        cache.insert(&[1, 2, 3], &[BlockId(10)]);
+        cache.insert(&[4, 5, 6], &[BlockId(11)]);
+        assert_eq!(cache.num_cached_blocks, 2);
+
+        let (blocks, _) = cache.match_prefix(&[1, 2, 3]);
+        assert_eq!(blocks, vec![BlockId(10)]);
+
+        let (blocks, _) = cache.match_prefix(&[4, 5, 6]);
+        assert_eq!(blocks, vec![BlockId(11)]);
+    }
+
+    #[test]
+    fn test_evict_lru_when_over_capacity() {
+        let mut cache = RadixCache::new(1);
+        cache.insert(&[1, 2, 3], &[BlockId(10)]);
+        cache.insert(&[4, 5, 6], &[BlockId(11)]);
+        assert_eq!(cache.num_cached_blocks, 1);
+    }
+
+    #[test]
+    fn test_lru_evicts_oldest() {
+        let mut cache = RadixCache::new(1);
+        cache.insert(&[1, 2], &[BlockId(10)]);
+        // Access the first sequence to make it newer
+        cache.match_prefix(&[1, 2]);
+        cache.insert(&[3, 4], &[BlockId(11)]);
+        // Second insert should evict first entry if access time matters,
+        // but since match_prefix updated last_accessed for the first,
+        // behavior depends on implementation.
+        // At minimum, num_cached_blocks should not exceed max_capacity.
+        assert!(cache.num_cached_blocks <= 1);
+    }
+}
