@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::distributed::DistributedContext;
 use crate::model::config::LlamaConfig;
 use crate::model::llama::LlamaModel;
@@ -10,9 +8,11 @@ use std::path::Path;
 
 pub enum LoadedModel {
     Standard(LlamaModel),
+    #[allow(dead_code)]
     Quantized(QuantizedLlama),
 }
 
+#[allow(dead_code)]
 pub struct ModelLoader {
     pub config: Option<LlamaConfig>,
     pub model_path: std::path::PathBuf,
@@ -20,6 +20,7 @@ pub struct ModelLoader {
 }
 
 impl ModelLoader {
+    #[allow(dead_code)]
     pub fn new<P: AsRef<Path>>(model_path: P) -> anyhow::Result<Self> {
         let model_path = model_path.as_ref().to_path_buf();
 
@@ -43,6 +44,7 @@ impl ModelLoader {
         })
     }
 
+    #[allow(dead_code)]
     pub fn load(
         &self,
         device: &Device,
