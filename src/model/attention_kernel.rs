@@ -34,6 +34,23 @@ impl PagedAttention {
         }
     }
 
+    /// Expand KV heads from num_kv_heads to num_heads for GQA by repeating each KV head.
+    fn expand_kv_for_gqa(&self, tensor: &Tensor) -> Result<Tensor> {
+        let kv_heads = tensor.dim(0)?;
+        if kv_heads == self.num_heads {
+            return Ok(tensor.clone());
+        }
+        let group_size = self.num_heads / kv_heads;
+        let mut heads = Vec::with_capacity(self.num_heads);
+        for h in 0..kv_heads {
+            let h_t = tensor.get(h)?;
+            for _ in 0..group_size {
+                heads.push(h_t.unsqueeze(0)?);
+            }
+        }
+        Tensor::cat(&heads, 0)
+    }
+
     /// Software PagedAttention: block-sparse attention with cached K/V blocks.
     ///
     /// Shapes:
@@ -76,14 +93,20 @@ impl PagedAttention {
                 let block_len = end_token - start_token;
 
                 let k_block = key_cache.get(tbl)?.squeeze(0)?;
-                let q_expanded = q.transpose(1, 2)?;
+                let k_block = self.expand_kv_for_gqa(&k_block)?;
 
-                let scores = q_expanded.matmul(&k_block)?;
-                let scores = (scores * scale)?;
+                let k_t = k_block.transpose(1, 2)?;
+                let q_2d = q.squeeze(0)?;
+                let q_exp = q_2d.unsqueeze(1)?;
+                let mut scores = q_exp.matmul(&k_t)?.squeeze(1)?;
+                scores = (scores * scale)?;
 
-                let scores_flat = scores.flatten_all()?.to_vec1::<f32>()?;
-                let block_scores = &scores_flat[scores_flat.len() - block_len * self.num_heads..];
-                attn_scores.extend_from_slice(block_scores);
+                let scores_2d: Vec<Vec<f32>> = scores.to_vec2::<f32>()?;
+                for h in 0..self.num_heads {
+                    for t in 0..block_len {
+                        attn_scores.push(scores_2d[h][t]);
+                    }
+                }
             }
 
             let attn_t = Tensor::from_slice(&attn_scores, (ctx_len, self.num_heads), device)?;
@@ -99,13 +122,79 @@ impl PagedAttention {
                 let block_len = end_token - start_token;
 
                 let v_block = value_cache.get(tbl)?.squeeze(0)?;
+                let v_block = self.expand_kv_for_gqa(&v_block)?;
                 let w = attn_weights.narrow(D::Minus1, start_token, block_len)?;
-                output = (output + w.matmul(&v_block)?)?;
+
+                let v_narrow = v_block.narrow(1, 0, block_len)?;
+                let w_exp = w.unsqueeze(1)?;
+                let contrib = w_exp.matmul(&v_narrow)?.squeeze(1)?;
+                output = (output + contrib.unsqueeze(0)?)?;
             }
 
             outputs.push(output);
         }
 
         Tensor::cat(&outputs, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candle_core::Device;
+
+    fn make_attention(block_size: usize, num_heads: usize, head_dim: usize, num_kv_heads: usize) -> PagedAttention {
+        PagedAttention::new(block_size, num_heads, head_dim, num_kv_heads)
+    }
+
+    #[test]
+    fn test_paged_attention_creation() {
+        let attn = make_attention(16, 8, 64, 2);
+        assert_eq!(attn.block_size, 16);
+        assert_eq!(attn.num_heads, 8);
+        assert_eq!(attn.head_dim, 64);
+        assert_eq!(attn.num_kv_heads, 2);
+    }
+
+    #[test]
+    fn test_paged_attention_zero_context() {
+        let device = Device::Cpu;
+        let attn = make_attention(16, 8, 64, 2);
+        let query = Tensor::zeros((1, 8, 64), DType::F32, &device).unwrap();
+        let key_cache = Tensor::zeros((4, 2, 16, 64), DType::F32, &device).unwrap();
+        let value_cache = Tensor::zeros((4, 2, 16, 64), DType::F32, &device).unwrap();
+        let block_table = Tensor::zeros((1, 4), DType::I64, &device).unwrap();
+        let context_lens = Tensor::zeros((1,), DType::I64, &device).unwrap();
+
+        let out = attn.forward(&query, &key_cache, &value_cache, &block_table, &context_lens).unwrap();
+        assert_eq!(out.dims(), &[1, 8, 64]);
+    }
+
+    #[test]
+    fn test_paged_attention_mha_single_block() {
+        let device = Device::Cpu;
+        let attn = make_attention(16, 8, 64, 8);
+        let query = Tensor::ones((1, 8, 64), DType::F32, &device).unwrap();
+        let key_cache = Tensor::ones((4, 8, 16, 64), DType::F32, &device).unwrap();
+        let value_cache = Tensor::ones((4, 8, 16, 64), DType::F32, &device).unwrap();
+        let block_table = Tensor::zeros((1, 4), DType::I64, &device).unwrap();
+        let context_lens = Tensor::full(8i64, (1,), &device).unwrap();
+
+        let out = attn.forward(&query, &key_cache, &value_cache, &block_table, &context_lens).unwrap();
+        assert_eq!(out.dims(), &[1, 8, 64]);
+    }
+
+    #[test]
+    fn test_paged_attention_mha_multi_block() {
+        let device = Device::Cpu;
+        let attn = make_attention(16, 8, 64, 8);
+        let query = Tensor::ones((1, 8, 64), DType::F32, &device).unwrap();
+        let key_cache = Tensor::ones((4, 8, 16, 64), DType::F32, &device).unwrap();
+        let value_cache = Tensor::ones((4, 8, 16, 64), DType::F32, &device).unwrap();
+        let block_table = Tensor::full(0i64, (1, 4), &device).unwrap();
+        let context_lens = Tensor::full(24i64, (1,), &device).unwrap();
+
+        let out = attn.forward(&query, &key_cache, &value_cache, &block_table, &context_lens).unwrap();
+        assert_eq!(out.dims(), &[1, 8, 64]);
     }
 }
