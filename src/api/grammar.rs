@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use candle_core::{Result, Tensor};
 use std::collections::HashSet;
 
@@ -13,19 +11,20 @@ pub enum GrammarConstraint {
 }
 
 #[derive(Default)]
-#[allow(dead_code)]
 pub struct GrammarState {
+    #[allow(dead_code)]
     pub stack: Vec<String>,
     pub current_text: String,
 }
 
-#[allow(dead_code)]
 pub struct GrammarLogitsProcessor {
+    #[allow(dead_code)]
     pub constraint: GrammarConstraint,
     pub state: GrammarState,
 }
 
 impl GrammarLogitsProcessor {
+    #[allow(dead_code)]
     pub fn new(constraint: GrammarConstraint) -> Self {
         Self {
             constraint,
@@ -33,6 +32,7 @@ impl GrammarLogitsProcessor {
         }
     }
 
+    #[allow(dead_code)]
     pub fn apply_grammar_mask(&mut self, logits: &Tensor, vocab_size: usize) -> Result<Tensor> {
         let valid_tokens = self.get_valid_tokens(vocab_size);
         let mut mask_data = vec![f32::NEG_INFINITY; vocab_size];
@@ -43,6 +43,7 @@ impl GrammarLogitsProcessor {
         logits.broadcast_add(&mask)
     }
 
+    #[allow(dead_code)]
     fn get_valid_tokens(&self, vocab_size: usize) -> HashSet<usize> {
         match &self.constraint {
             GrammarConstraint::None => (0..vocab_size).collect(),
@@ -54,6 +55,7 @@ impl GrammarLogitsProcessor {
         }
     }
 
+    #[allow(dead_code)]
     pub fn advance(&mut self, token_text: &str) {
         self.state.current_text.push_str(token_text);
     }

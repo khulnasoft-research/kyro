@@ -1,8 +1,7 @@
-#![allow(dead_code)]
-
 use super::QuantizedLayer;
 use candle_core::{DType, Result, Tensor};
 
+#[allow(dead_code)]
 pub struct AwqLinear {
     pub qweight: Tensor,
     pub qzeros: Tensor,
@@ -12,6 +11,7 @@ pub struct AwqLinear {
 }
 
 impl AwqLinear {
+    #[allow(dead_code)]
     pub fn new(qweight: Tensor, qzeros: Tensor, scales: Tensor, bias: Option<Tensor>) -> Self {
         Self {
             qweight,

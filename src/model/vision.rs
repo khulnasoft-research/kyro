@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use candle_core::{Result, Tensor};
 use candle_nn::{Linear, Module};
 
@@ -19,6 +17,7 @@ pub struct VisionTransformerBlock {
 }
 
 impl VisionEncoder {
+    #[allow(dead_code)]
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
         Ok(x.clone())
     }
@@ -31,10 +30,12 @@ pub struct VisionLanguageProjection {
 }
 
 impl VisionLanguageProjection {
+    #[allow(dead_code)]
     pub fn new(linear_1: Linear, linear_2: Linear) -> Self {
         Self { linear_1, linear_2 }
     }
 
+    #[allow(dead_code)]
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let x = self.linear_1.forward(x)?;
         let x = x.relu()?;

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::QuantizedLayer;
 use candle_core::{DType, Result, Tensor};
 
@@ -11,6 +9,7 @@ pub struct Fp8Linear {
 }
 
 impl Fp8Linear {
+    #[allow(dead_code)]
     pub fn new(weight: Tensor, scale: Tensor, bias: Option<Tensor>) -> Self {
         Self {
             weight,

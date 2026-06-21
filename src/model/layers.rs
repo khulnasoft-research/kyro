@@ -6,7 +6,6 @@ pub struct RmsNorm {
 }
 
 impl RmsNorm {
-    #[allow(dead_code)]
     pub fn new(dim: usize, eps: f64, vb: VarBuilder) -> Result<Self> {
         let inner = candle_nn::rms_norm(dim, eps, vb)?;
         Ok(Self { inner })
@@ -19,14 +18,14 @@ impl Module for RmsNorm {
     }
 }
 
-#[allow(dead_code)]
 pub struct RotaryEmbedding {
+    #[allow(dead_code)]
     inv_freq: Tensor,
+    #[allow(dead_code)]
     max_seq_len: usize,
 }
 
 impl RotaryEmbedding {
-    #[allow(dead_code)]
     pub fn new(dim: usize, max_seq_len: usize, device: &Device) -> Result<Self> {
         Ok(Self {
             inv_freq: Tensor::new(

@@ -1,15 +1,15 @@
-#![allow(dead_code)]
-
 use candle_core::{Device, Result, Tensor};
 use candle_transformers::models::quantized_llama::ModelWeights;
 use std::path::Path;
 
+#[allow(dead_code)]
 pub struct QuantizedLlama {
     pub inner: ModelWeights,
-    device: Device,
+    pub device: Device,
 }
 
 impl QuantizedLlama {
+    #[allow(dead_code)]
     pub fn load_gguf<P: AsRef<Path>>(path: P, device: &Device) -> Result<Self> {
         let mut file = std::fs::File::open(path.as_ref())?;
         let model = candle_core::quantized::gguf_file::Content::read(&mut file)?;
@@ -20,6 +20,7 @@ impl QuantizedLlama {
         })
     }
 
+    #[allow(dead_code)]
     pub fn forward(&mut self, x: &Tensor, index: usize) -> Result<Tensor> {
         // Quantized models often take slightly different forward signatures.
         // We adapt it here.

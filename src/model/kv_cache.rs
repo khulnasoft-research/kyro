@@ -1,14 +1,14 @@
-#![allow(dead_code)]
-
 use crate::scheduler::block_manager::BlockId;
 use candle_core::{Result, Tensor};
 
+#[allow(dead_code)]
 pub struct KVCache {
     blocks: Vec<Vec<u32>>,
     block_size: usize,
 }
 
 impl KVCache {
+    #[allow(dead_code)]
     pub fn new(block_size: usize) -> Self {
         Self {
             blocks: Vec::new(),
@@ -16,6 +16,7 @@ impl KVCache {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(
         &mut self,
         block_id: BlockId,

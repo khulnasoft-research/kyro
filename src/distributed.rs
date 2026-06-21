@@ -3,6 +3,7 @@ pub struct DistributedContext {
     pub world_size: u32,
 }
 
+#[allow(dead_code)]
 impl DistributedContext {
     pub fn new() -> Self {
         Self {

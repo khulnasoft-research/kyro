@@ -1,15 +1,18 @@
-#![allow(dead_code)]
-
 use anyhow::Result;
 use prometheus::{Counter, Gauge, Histogram, Registry};
 use std::sync::Arc;
 
 pub struct EngineMetrics {
+    #[allow(dead_code)]
     pub total_requests: Counter,
     pub total_tokens_generated: Counter,
+    #[allow(dead_code)]
     pub token_latency: Histogram,
+    #[allow(dead_code)]
     pub time_to_first_token: Histogram,
+    #[allow(dead_code)]
     pub time_between_tokens: Histogram,
+    #[allow(dead_code)]
     pub kv_cache_usage: Gauge,
 }
 

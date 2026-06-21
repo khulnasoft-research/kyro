@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-
 use candle_core::{Result, Tensor};
 use candle_nn::{Linear, Module};
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 pub struct LoraAdapter {
     pub id: String,
     pub a: Tensor, // [rank, hidden_in]
@@ -12,12 +11,14 @@ pub struct LoraAdapter {
     pub rank: usize,
 }
 
+#[allow(dead_code)]
 pub struct LoraLinear {
     pub base: Linear,
     pub adapters: HashMap<String, LoraAdapter>,
 }
 
 impl LoraLinear {
+    #[allow(dead_code)]
     pub fn new(base: Linear) -> Self {
         Self {
             base,
@@ -25,10 +26,12 @@ impl LoraLinear {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_adapter(&mut self, adapter: LoraAdapter) {
         self.adapters.insert(adapter.id.clone(), adapter);
     }
 
+    #[allow(dead_code)]
     pub fn forward(&self, x: &Tensor, adapter_id: Option<&str>) -> Result<Tensor> {
         let base_out = self.base.forward(x)?;
 

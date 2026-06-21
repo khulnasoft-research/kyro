@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub struct PipelineContext {
     pub rank: usize,
     pub world_size: usize,
@@ -29,6 +27,7 @@ impl PipelineContext {
         self.rank == self.world_size - 1
     }
 
+    #[allow(dead_code)]
     pub fn should_process_layer(&self, index: usize) -> bool {
         index >= self.start_layer && index < self.end_layer
     }

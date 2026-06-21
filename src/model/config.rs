@@ -1,22 +1,28 @@
-#![allow(dead_code)]
-
 use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LlamaConfig {
+    #[allow(dead_code)]
     pub hidden_size: usize,
+    #[allow(dead_code)]
     pub intermediate_size: usize,
     pub num_hidden_layers: usize,
+    #[allow(dead_code)]
     pub num_attention_heads: usize,
+    #[allow(dead_code)]
     pub num_key_value_heads: usize,
+    #[allow(dead_code)]
     pub vocab_size: usize,
+    #[allow(dead_code)]
     pub rms_norm_eps: f64,
+    #[allow(dead_code)]
     pub rope_theta: f32,
 }
 
 impl LlamaConfig {
+    #[allow(dead_code)]
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = std::fs::File::open(path)?;
         let config: Self = serde_json::from_reader(file)?;
