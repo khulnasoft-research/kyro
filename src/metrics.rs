@@ -64,3 +64,37 @@ impl EngineMetrics {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_new_succeeds() {
+        let registry = Registry::new();
+        let metrics = EngineMetrics::new(&registry).unwrap();
+        assert!((metrics.total_tokens_generated.get() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_metrics_are_registered() {
+        let registry = Registry::new();
+        let _metrics = EngineMetrics::new(&registry).unwrap();
+        let gathered = registry.gather();
+        let names: Vec<&str> = gathered.iter().map(|mf| mf.get_name()).collect();
+        assert!(names.contains(&"kyro_requests_total"));
+        assert!(names.contains(&"kyro_tokens_total"));
+        assert!(names.contains(&"kyro_token_latency_seconds"));
+        assert!(names.contains(&"kyro_ttft_ms"));
+        assert!(names.contains(&"kyro_tbt_ms"));
+        assert!(names.contains(&"kyro_kv_cache_usage_percent"));
+    }
+
+    #[test]
+    fn test_metrics_can_be_incremented() {
+        let registry = Registry::new();
+        let metrics = EngineMetrics::new(&registry).unwrap();
+        metrics.total_tokens_generated.inc_by(42.0);
+        assert!((metrics.total_tokens_generated.get() - 42.0).abs() < f64::EPSILON);
+    }
+}

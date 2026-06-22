@@ -24,8 +24,6 @@ pub struct Request {
     pub grammar_processor: Option<crate::api::grammar::GrammarLogitsProcessor>,
 }
 
-pub const PREFILL_CHUNK_SIZE: usize = 512;
-
 pub struct SchedulerConfig {
     pub max_tokens_per_iter: usize,
     pub max_prefill_chunk_size: usize,
@@ -125,7 +123,7 @@ impl Scheduler {
             if let Some((_blocks, cached_len)) =
                 self.block_manager.allocate_with_prefix(req.id, &tokens)
             {
-                let mut req = self.waiting_queue.pop_front().unwrap();
+                let mut req = self.waiting_queue.pop_front().expect("front checked above");
                 req.cached_prefix_len = cached_len;
                 req.prefill_cursor = cached_len;
 

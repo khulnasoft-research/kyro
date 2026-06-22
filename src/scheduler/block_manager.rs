@@ -89,7 +89,10 @@ impl BlockManager {
         // 4. Allocate new blocks for the uncached suffix
         let mut all_blocks = cached_blocks;
         for _ in 0..new_blocks_needed {
-            let block = self.free_gpu_blocks.pop().unwrap();
+            let block = self
+                .free_gpu_blocks
+                .pop()
+                .expect("free blocks checked above");
             self.ref_counts[block.0] = 1; // 1 for the request
             all_blocks.push(block);
         }
@@ -109,7 +112,10 @@ impl BlockManager {
         }
         let mut allocated = Vec::with_capacity(num_blocks);
         for _ in 0..num_blocks {
-            let block = self.free_gpu_blocks.pop().unwrap();
+            let block = self
+                .free_gpu_blocks
+                .pop()
+                .expect("free blocks checked above");
             self.ref_counts[block.0] = 1;
             allocated.push(block);
         }

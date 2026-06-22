@@ -8,8 +8,8 @@ pub struct MoeLayer {
     pub top_k: usize,
 }
 
+#[allow(dead_code)]
 impl MoeLayer {
-    #[allow(dead_code)]
     pub fn new(gate: Linear, experts: Vec<Linear>, top_k: usize) -> Self {
         Self {
             gate,
@@ -18,25 +18,31 @@ impl MoeLayer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
         let orig_dims = x.dims();
         let (batch_size, seq_len, hidden_dim) = x.dims3()?;
         let num_tokens = batch_size * seq_len;
         let x_flat = x.reshape((num_tokens, hidden_dim))?;
 
-        // 1. Get routing logits and probabilities
         let gate_logits = self.gate.forward(&x_flat)?;
         let gate_probs = candle_nn::ops::softmax(&gate_logits, D::Minus1)?;
 
-        // 2. Dispatch to experts weighted by routing probabilities
+        let num_experts = self.experts.len();
+        let (_sorted_vals, sorted_idx) = gate_probs.sort_last_dim(false)?;
+        let top_idx = sorted_idx.narrow(1, 0, self.top_k)?;
+
         let mut output = Tensor::zeros_like(&x_flat)?;
 
-        // Simplified approach: for each expert, dispatch tokens with highest routing weight
-        for expert_idx in 0..self.experts.len() {
-            let expert_weight = gate_probs.get(expert_idx)?.unsqueeze(1)?;
+        for expert_idx in 0..num_experts {
+            let mask = top_idx.eq(expert_idx as u32)?;
+            let in_topk = mask.sum(1)?.to_dtype(x.dtype())?;
+            let count = in_topk.sum_all()?.to_scalar::<f64>()?;
+            if count < 0.5 {
+                continue;
+            }
+            let weight = gate_probs.narrow(1, expert_idx, 1)?;
             let expert_output = self.experts[expert_idx].forward(&x_flat)?;
-            let contribution = (expert_output * expert_weight)?;
+            let contribution = (expert_output * weight.broadcast_mul(&in_topk.unsqueeze(1)?)?)?;
             output = (output + contribution)?;
         }
 

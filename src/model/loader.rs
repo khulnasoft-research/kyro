@@ -3,6 +3,7 @@ use crate::model::config::LlamaConfig;
 use crate::model::llama::LlamaModel;
 use crate::model::pipeline::PipelineContext;
 use crate::model::quantized::QuantizedLlama;
+use anyhow::Context;
 use candle_core::Device;
 use std::path::Path;
 
@@ -55,7 +56,10 @@ impl ModelLoader {
             return Ok(LoadedModel::Quantized(q_model));
         }
 
-        let config = self.config.as_ref().unwrap();
+        let config = self
+            .config
+            .as_ref()
+            .context("Model config required for non-GGUF loading")?;
 
         let mut tensors_files = Vec::new();
         let read_dir = std::fs::read_dir(&self.model_path)?;

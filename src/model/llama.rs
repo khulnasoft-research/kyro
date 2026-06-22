@@ -181,8 +181,7 @@ impl LlamaModel {
         vb: VarBuilder,
         device: &Device,
         dist: Arc<DistributedContext>,
-    #[allow(dead_code)]
-    pipeline_ctx: PipelineContext,
+        #[allow(dead_code)] pipeline_ctx: PipelineContext,
     ) -> Result<Self> {
         let embed_tokens = if pipeline_ctx.is_first_stage() {
             Some(candle_nn::embedding(

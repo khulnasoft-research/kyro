@@ -53,13 +53,10 @@ impl SpeculativeDecoder {
 
         // Phase 3: Rejection sampling — accept tokens that match target's top-1
         let mut accepted = Vec::new();
-        for i in 0..self.lookahead {
-            let target_top = target_logits
-                .get(i)?
-                .argmax(0)?
-                .to_scalar::<u32>()?;
-            if target_top == draft_tokens[i] {
-                accepted.push(draft_tokens[i]);
+        for (i, &draft_token) in draft_tokens.iter().enumerate().take(self.lookahead) {
+            let target_top = target_logits.get(i)?.argmax(0)?.to_scalar::<u32>()?;
+            if target_top == draft_token {
+                accepted.push(draft_token);
             } else {
                 accepted.push(target_top);
                 break;
@@ -72,10 +69,60 @@ impl SpeculativeDecoder {
                 LoadedModel::Standard(m) => m.forward(input, index)?,
                 LoadedModel::Quantized(q) => q.forward(input, index)?,
             };
-            let token = logits.squeeze(1)?.squeeze(0)?.argmax(0)?.to_scalar::<u32>()?;
+            let token = logits
+                .squeeze(1)?
+                .squeeze(0)?
+                .argmax(0)?
+                .to_scalar::<u32>()?;
             accepted.push(token);
         }
 
         Ok(accepted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::config::LlamaConfig;
+    use crate::model::llama::LlamaModel;
+    use candle_core::{DType, Device};
+
+    fn make_dummy_decoder(lookahead: usize) -> SpeculativeDecoder {
+        let cfg = LlamaConfig::llama_7b();
+        let model = LlamaModel::dummy(&cfg).unwrap();
+        let draft = LlamaModel::dummy(&cfg).unwrap();
+        SpeculativeDecoder {
+            target_model: LoadedModel::Standard(model),
+            draft_model: LoadedModel::Standard(draft),
+            lookahead,
+        }
+    }
+
+    #[test]
+    fn test_speculative_decoder_creation() {
+        let decoder = make_dummy_decoder(5);
+        assert_eq!(decoder.lookahead, 5);
+    }
+
+    #[test]
+    fn test_speculative_step_returns_tokens() {
+        let device = Device::Cpu;
+        let mut decoder = make_dummy_decoder(1);
+        let input = Tensor::zeros((1, 1, 1), DType::F32, &device).unwrap();
+        let result = decoder.step(&input, 0).unwrap();
+        assert!(!result.is_empty(), "should produce at least one token");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_speculative_step_output_is_u32() {
+        let device = Device::Cpu;
+        let mut decoder = make_dummy_decoder(1);
+        let input = Tensor::zeros((1, 1, 1), DType::F32, &device).unwrap();
+        let result = decoder.step(&input, 0).unwrap();
+        for &token in &result {
+            assert!(token < 100, "dummy model should produce small tokens");
+        }
     }
 }

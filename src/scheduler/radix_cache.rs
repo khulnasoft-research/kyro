@@ -98,7 +98,10 @@ impl RadixCache {
                 break;
             }
 
-            let child = current_node.children.get_mut(&first_token).unwrap();
+            let child = current_node
+                .children
+                .get_mut(&first_token)
+                .expect("child exists after entry check");
             token_idx += child.tokens.len();
             current_node = child;
         }
@@ -126,8 +129,7 @@ impl RadixCache {
         blocks_to_free
     }
 
-    fn remove_oldest_leaf(&mut self) -> Option<Vec<BlockId>> {
-        let node = &mut self.root;
+    fn find_oldest_leaf(node: &mut RadixNode) -> Option<(Vec<u32>, Vec<BlockId>)> {
         if node.children.is_empty() {
             return None;
         }
@@ -135,7 +137,7 @@ impl RadixCache {
         let mut oldest_token = None;
         let mut oldest_time = Instant::now();
 
-        for (token, child) in &node.children {
+        for (token, child) in node.children.iter() {
             if child.children.is_empty() && child.last_accessed < oldest_time {
                 oldest_time = child.last_accessed;
                 oldest_token = Some(*token);
@@ -143,11 +145,22 @@ impl RadixCache {
         }
 
         if let Some(token) = oldest_token {
-            let child = node.children.remove(&token).unwrap();
-            Some(child.block_ids)
-        } else {
-            None
+            let child = node.children.remove(&token).expect("checked above");
+            return Some((vec![token], child.block_ids));
         }
+
+        for (token, child) in node.children.iter_mut() {
+            if let Some((mut path, block_ids)) = Self::find_oldest_leaf(child) {
+                path.insert(0, *token);
+                return Some((path, block_ids));
+            }
+        }
+
+        None
+    }
+
+    fn remove_oldest_leaf(&mut self) -> Option<Vec<BlockId>> {
+        Self::find_oldest_leaf(&mut self.root).map(|(_path, block_ids)| block_ids)
     }
 }
 

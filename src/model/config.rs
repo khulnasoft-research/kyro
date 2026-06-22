@@ -1,8 +1,8 @@
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LlamaConfig {
     #[allow(dead_code)]
     pub hidden_size: usize,
@@ -40,5 +40,37 @@ impl LlamaConfig {
             rms_norm_eps: 1e-6,
             rope_theta: 10000.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_llama_7b_preset_values() {
+        let cfg = LlamaConfig::llama_7b();
+        assert_eq!(cfg.hidden_size, 4096);
+        assert_eq!(cfg.intermediate_size, 11008);
+        assert_eq!(cfg.num_hidden_layers, 32);
+        assert_eq!(cfg.num_attention_heads, 32);
+        assert_eq!(cfg.num_key_value_heads, 32);
+        assert_eq!(cfg.vocab_size, 32000);
+        assert!((cfg.rms_norm_eps - 1e-6).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_llama_7b_uses_mha() {
+        let cfg = LlamaConfig::llama_7b();
+        assert_eq!(cfg.num_attention_heads, cfg.num_key_value_heads);
+    }
+
+    #[test]
+    fn test_config_serde_roundtrip() {
+        let cfg = LlamaConfig::llama_7b();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let deserialized: LlamaConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.hidden_size, cfg.hidden_size);
+        assert_eq!(deserialized.num_hidden_layers, cfg.num_hidden_layers);
     }
 }

@@ -1,33 +1,41 @@
-use crate::scheduler::block_manager::BlockId;
-use candle_core::{Result, Tensor};
+use candle_core::{Device, Result, Tensor};
 
 #[allow(dead_code)]
 pub struct KVCache {
-    blocks: Vec<Vec<u32>>,
-    block_size: usize,
+    pub key_cache: Tensor,
+    pub value_cache: Tensor,
+    pub block_size: usize,
+    pub num_blocks: usize,
+    pub num_kv_heads: usize,
+    pub head_dim: usize,
 }
 
+#[allow(dead_code)]
 impl KVCache {
-    #[allow(dead_code)]
-    pub fn new(block_size: usize) -> Self {
-        Self {
-            blocks: Vec::new(),
+    pub fn new(
+        num_blocks: usize,
+        block_size: usize,
+        num_kv_heads: usize,
+        head_dim: usize,
+        device: &Device,
+    ) -> Result<Self> {
+        let key_cache = Tensor::zeros(
+            (num_blocks, num_kv_heads, block_size, head_dim),
+            candle_core::DType::F16,
+            device,
+        )?;
+        let value_cache = Tensor::zeros(
+            (num_blocks, num_kv_heads, block_size, head_dim),
+            candle_core::DType::F16,
+            device,
+        )?;
+        Ok(Self {
+            key_cache,
+            value_cache,
             block_size,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn update(
-        &mut self,
-        block_id: BlockId,
-        _slot_idx: usize,
-        _key: &Tensor,
-        _value: &Tensor,
-    ) -> Result<()> {
-        let block_idx = block_id.0;
-        while self.blocks.len() <= block_idx {
-            self.blocks.push(Vec::new());
-        }
-        Ok(())
+            num_blocks,
+            num_kv_heads,
+            head_dim,
+        })
     }
 }
