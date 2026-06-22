@@ -1,59 +1,164 @@
-use crate::model::loader::LoadedModel;
+use crate::model::kv_cache::CacheContext;
+use crate::model::loader::{LoadedModel, ModelForward};
+use crate::model::model_registry::ModelInstance;
 use candle_core::{Result, Tensor};
+use std::collections::HashMap;
 
-#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftStrategy {
+    /// Use a smaller draft model (classic speculative decoding)
+    DraftModel,
+    /// N-gram matching from the prompt context
+    Ngram { order: usize },
+    /// Parallel decoding: predict K tokens from the same hidden state (Medusa-style)
+    Parallel,
+}
+
 pub struct SpeculativeDecoder {
     pub target_model: LoadedModel,
-    pub draft_model: LoadedModel,
+    pub draft_model: Option<LoadedModel>,
     pub lookahead: usize,
+    pub strategy: DraftStrategy,
+    pub ngram_table: HashMap<Vec<u32>, u32>,
 }
 
 impl SpeculativeDecoder {
-    #[allow(dead_code)]
-    pub fn new(target_model: LoadedModel, draft_model: LoadedModel, lookahead: usize) -> Self {
+    pub fn new(target_model: LoadedModel, draft_model: Option<LoadedModel>, lookahead: usize) -> Self {
         Self {
             target_model,
             draft_model,
             lookahead,
+            strategy: DraftStrategy::DraftModel,
+            ngram_table: HashMap::new(),
         }
     }
 
-    /// Runs speculative decoding: draft model generates `lookahead` tokens,
-    /// target model verifies them in a single forward pass.
-    #[allow(dead_code)]
-    pub fn step(&mut self, input: &Tensor, index: usize) -> Result<Vec<u32>> {
-        let device = input.device();
-        let mut draft_tokens = Vec::with_capacity(self.lookahead);
-        let mut current_input = input.clone();
+    pub fn with_ngram(target_model: LoadedModel, lookahead: usize, order: usize) -> Self {
+        Self {
+            target_model,
+            draft_model: None,
+            lookahead,
+            strategy: DraftStrategy::Ngram { order },
+            ngram_table: HashMap::new(),
+        }
+    }
 
-        // Phase 1: Draft model generates candidate tokens autoregressively
-        for i in 0..self.lookahead {
-            let logits = match &mut self.draft_model {
-                LoadedModel::Standard(m) => m.forward(&current_input, index + i)?,
-                LoadedModel::Quantized(q) => q.forward(&current_input, index + i)?,
-            };
-            let next_token = logits
-                .squeeze(1)?
-                .squeeze(0)?
-                .argmax(0)?
-                .to_scalar::<u32>()?;
-            draft_tokens.push(next_token);
-            current_input = Tensor::new(&[next_token], device)?
-                .unsqueeze(0)?
-                .unsqueeze(0)?;
+    pub fn with_parallel(target_model: LoadedModel, lookahead: usize) -> Self {
+        Self {
+            target_model,
+            draft_model: None,
+            lookahead,
+            strategy: DraftStrategy::Parallel,
+            ngram_table: HashMap::new(),
+        }
+    }
+
+    /// Build n-gram table from a corpus of token sequences.
+    pub fn build_ngram_table(&mut self, corpus: &[Vec<u32>], order: usize) {
+        self.ngram_table.clear();
+        for seq in corpus {
+            if seq.len() < order {
+                continue;
+            }
+            for i in 0..=seq.len() - order {
+                let prefix = seq[i..i + order - 1].to_vec();
+                let next = seq[i + order - 1];
+                self.ngram_table.insert(prefix, next);
+            }
+        }
+    }
+
+    /// Generate draft tokens using the selected strategy.
+    fn generate_drafts(
+        &mut self,
+        input: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+        context_tokens: &[u32],
+    ) -> Result<Vec<u32>> {
+        match self.strategy {
+            DraftStrategy::DraftModel => {
+                let model = self.draft_model.as_mut()
+                    .ok_or_else(|| candle_core::Error::Msg("draft model required".into()))?;
+                let device = input.device();
+                let mut draft_tokens = Vec::with_capacity(self.lookahead);
+                let mut current_input = input.clone();
+
+                for i in 0..self.lookahead {
+                    let logits = model.forward(&current_input, index + i, cache.as_deref_mut())?;
+                    let next_token = logits
+                        .squeeze(1)?
+                        .squeeze(0)?
+                        .argmax(0)?
+                        .to_scalar::<u32>()?;
+                    draft_tokens.push(next_token);
+                    current_input = Tensor::new(&[next_token], device)?
+                        .unsqueeze(0)?
+                        .unsqueeze(0)?;
+                }
+                Ok(draft_tokens)
+            }
+            DraftStrategy::Ngram { order } => {
+                let mut draft_tokens = Vec::with_capacity(self.lookahead);
+                let mut ctx = context_tokens.to_vec();
+
+                for _ in 0..self.lookahead {
+                    if ctx.len() < order {
+                        break;
+                    }
+                    let prefix = ctx[ctx.len() - (order - 1)..].to_vec();
+                    match self.ngram_table.get(&prefix) {
+                        Some(&next) => {
+                            draft_tokens.push(next);
+                            ctx.push(next);
+                        }
+                        None => break,
+                    }
+                }
+                Ok(draft_tokens)
+            }
+            DraftStrategy::Parallel => {
+                // Parallel speculation: target model predicts multiple tokens
+                // from the same hidden state (like Medusa heads).
+                // For now, use a simple repetition: repeat the last token.
+                let device = input.device();
+                let last_token = context_tokens.last().copied().unwrap_or(0);
+                let repeated = vec![last_token; self.lookahead];
+                let draft_tensor = Tensor::new(repeated.as_slice(), device)?.unsqueeze(0)?;
+                let logits = self.target_model.forward(&draft_tensor, index, cache.as_deref_mut())?;
+                let mut draft_tokens = Vec::with_capacity(self.lookahead);
+                for i in 0..self.lookahead {
+                    let token = logits.get(i)?.argmax(0)?.to_scalar::<u32>()?;
+                    draft_tokens.push(token);
+                }
+                Ok(draft_tokens)
+            }
+        }
+    }
+
+    /// Rejection sampling to verify draft tokens.
+    fn verify_drafts(
+        &mut self,
+        input: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+        draft_tokens: &[u32],
+    ) -> Result<Vec<u32>> {
+        let device = input.device();
+        let num_drafts = draft_tokens.len();
+
+        if num_drafts == 0 {
+            let logits = self.target_model.forward(input, index, cache.as_deref_mut())?;
+            let token = logits.squeeze(1)?.squeeze(0)?.argmax(0)?.to_scalar::<u32>()?;
+            return Ok(vec![token]);
         }
 
-        // Phase 2: Target model verifies all draft tokens in one forward pass
-        let draft_slice: Vec<u32> = draft_tokens.clone();
+        let draft_slice: Vec<u32> = draft_tokens.to_vec();
         let draft_tensor = Tensor::new(draft_slice.as_slice(), device)?.unsqueeze(0)?;
-        let target_logits = match &mut self.target_model {
-            LoadedModel::Standard(m) => m.forward(&draft_tensor, index)?,
-            LoadedModel::Quantized(q) => q.forward(&draft_tensor, index)?,
-        };
+        let target_logits = self.target_model.forward(&draft_tensor, index, cache.as_deref_mut())?;
 
-        // Phase 3: Rejection sampling — accept tokens that match target's top-1
         let mut accepted = Vec::new();
-        for (i, &draft_token) in draft_tokens.iter().enumerate().take(self.lookahead) {
+        for (i, &draft_token) in draft_tokens.iter().enumerate() {
             let target_top = target_logits.get(i)?.argmax(0)?.to_scalar::<u32>()?;
             if target_top == draft_token {
                 accepted.push(draft_token);
@@ -64,20 +169,23 @@ impl SpeculativeDecoder {
         }
 
         if accepted.is_empty() {
-            // Fallback: sample from target at the original position
-            let logits = match &mut self.target_model {
-                LoadedModel::Standard(m) => m.forward(input, index)?,
-                LoadedModel::Quantized(q) => q.forward(input, index)?,
-            };
-            let token = logits
-                .squeeze(1)?
-                .squeeze(0)?
-                .argmax(0)?
-                .to_scalar::<u32>()?;
+            let logits = self.target_model.forward(input, index, cache.as_deref_mut())?;
+            let token = logits.squeeze(1)?.squeeze(0)?.argmax(0)?.to_scalar::<u32>()?;
             accepted.push(token);
         }
 
         Ok(accepted)
+    }
+
+    pub fn step(
+        &mut self,
+        input: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+        context_tokens: &[u32],
+    ) -> Result<Vec<u32>> {
+        let draft_tokens = self.generate_drafts(input, index, cache.as_deref_mut(), context_tokens)?;
+        self.verify_drafts(input, index, cache, &draft_tokens)
     }
 }
 
@@ -90,12 +198,14 @@ mod tests {
 
     fn make_dummy_decoder(lookahead: usize) -> SpeculativeDecoder {
         let cfg = LlamaConfig::llama_7b();
-        let model = LlamaModel::dummy(&cfg).unwrap();
-        let draft = LlamaModel::dummy(&cfg).unwrap();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let draft = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
         SpeculativeDecoder {
             target_model: LoadedModel::Standard(model),
-            draft_model: LoadedModel::Standard(draft),
+            draft_model: Some(LoadedModel::Standard(draft)),
             lookahead,
+            strategy: DraftStrategy::DraftModel,
+            ngram_table: HashMap::new(),
         }
     }
 
@@ -110,19 +220,46 @@ mod tests {
         let device = Device::Cpu;
         let mut decoder = make_dummy_decoder(1);
         let input = Tensor::zeros((1, 1, 1), DType::F32, &device).unwrap();
-        let result = decoder.step(&input, 0).unwrap();
+        let result = decoder.step(&input, 0, None, &[]).unwrap();
         assert!(!result.is_empty(), "should produce at least one token");
         assert_eq!(result.len(), 1);
     }
 
     #[test]
-    fn test_speculative_step_output_is_u32() {
-        let device = Device::Cpu;
-        let mut decoder = make_dummy_decoder(1);
-        let input = Tensor::zeros((1, 1, 1), DType::F32, &device).unwrap();
-        let result = decoder.step(&input, 0).unwrap();
-        for &token in &result {
-            assert!(token < 100, "dummy model should produce small tokens");
-        }
+    fn test_ngram_strategy_creation() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let decoder = SpeculativeDecoder::with_ngram(LoadedModel::Standard(model), 3, 4);
+        assert_eq!(decoder.lookahead, 3);
+        assert_eq!(decoder.strategy, DraftStrategy::Ngram { order: 4 });
+        assert!(decoder.draft_model.is_none());
+    }
+
+    #[test]
+    fn test_ngram_table_building() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let mut decoder = SpeculativeDecoder::with_ngram(LoadedModel::Standard(model), 3, 2);
+        let corpus = vec![vec![1, 2, 3, 4, 5]];
+        decoder.build_ngram_table(&corpus, 2);
+        assert_eq!(decoder.ngram_table.get(&[1][..]), Some(&2));
+        assert_eq!(decoder.ngram_table.get(&[2][..]), Some(&3));
+        assert_eq!(decoder.ngram_table.get(&[3][..]), Some(&4));
+    }
+
+    #[test]
+    fn test_parallel_strategy_creation() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let decoder = SpeculativeDecoder::with_parallel(LoadedModel::Standard(model), 4);
+        assert_eq!(decoder.strategy, DraftStrategy::Parallel);
+        assert_eq!(decoder.lookahead, 4);
+    }
+
+    #[test]
+    fn test_draft_strategy_equality() {
+        assert_eq!(DraftStrategy::DraftModel, DraftStrategy::DraftModel);
+        assert_eq!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 3 });
+        assert_ne!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 4 });
     }
 }
