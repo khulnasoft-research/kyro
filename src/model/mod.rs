@@ -1,12 +1,15 @@
 pub mod attention_kernel;
 pub mod config;
+pub mod engine;
 pub mod kv_cache;
 pub mod layers;
 pub mod llama;
 pub mod loader;
 pub mod lora;
+pub mod model_registry;
 pub mod moe;
 pub mod pipeline;
+pub mod qwen;
 pub mod quantization;
 pub mod quantized;
 pub mod vision;

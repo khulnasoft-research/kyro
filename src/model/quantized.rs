@@ -1,3 +1,4 @@
+use crate::model::kv_cache::CacheContext;
 use candle_core::{Device, Result, Tensor};
 use candle_transformers::models::quantized_llama::ModelWeights;
 use std::path::Path;
@@ -21,9 +22,12 @@ impl QuantizedLlama {
     }
 
     #[allow(dead_code)]
-    pub fn forward(&mut self, x: &Tensor, index: usize) -> Result<Tensor> {
-        // Quantized models often take slightly different forward signatures.
-        // We adapt it here.
+    pub fn forward(
+        &mut self,
+        x: &Tensor,
+        index: usize,
+        _cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         self.inner.forward(x, index)
     }
 }

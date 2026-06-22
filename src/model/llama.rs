@@ -1,6 +1,7 @@
 use crate::distributed::DistributedContext;
 use crate::model::attention_kernel::PagedAttention;
 use crate::model::config::LlamaConfig;
+use crate::model::kv_cache::CacheContext;
 use crate::model::layers::{RmsNorm, RotaryEmbedding};
 use crate::model::pipeline::PipelineContext;
 use candle_core::{Device, Result, Tensor};
@@ -17,9 +18,7 @@ pub struct LlamaAttention {
     n_heads: usize,
     n_kv_heads: usize,
     pub head_dim: usize,
-    #[allow(dead_code)]
     dist: Arc<DistributedContext>,
-    #[allow(dead_code)]
     paged_attn: PagedAttention,
 }
 
@@ -58,7 +57,12 @@ impl LlamaAttention {
         })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let (b_sz, seq_len, _) = x.dims3()?;
         let q = self.q_proj.forward(x)?;
         let k = self.k_proj.forward(x)?;
@@ -71,18 +75,58 @@ impl LlamaAttention {
         let q = self.rope.apply(&q, index)?;
         let k = self.rope.apply(&k, index)?;
 
-        // SDPA (Simplified)
-        let att = (q.matmul(&k.transpose(2, 3)?)? / (self.head_dim as f64).sqrt())?;
+        // If we have a KV cache, store the computed K/V and use cached + new K/V for attention
+        let (full_k, full_v) = if let Some(ctx) = cache.as_mut() {
+            let rid = ctx.request_id;
+            ctx.manager.append_kv(rid, &k, &v)?;
+            let ctx_len = ctx.manager.get_context_len(rid);
+            if seq_len == 1 && ctx_len > seq_len {
+                // Decode step: use cached K/V + new K/V for attention
+                let cached_k = ctx.manager.get_cached_key(rid)
+                    .ok_or_else(|| candle_core::Error::Msg("cached key missing".into()))?;
+                let cached_v = ctx.manager.get_cached_value(rid)
+                    .ok_or_else(|| candle_core::Error::Msg("cached value missing".into()))?;
+                (cached_k, cached_v)
+            } else {
+                // Prefill step: just use the computed K/V (already appended)
+                (k.clone(), v.clone())
+            }
+        } else {
+            (k.clone(), v.clone())
+        };
+
+        // Expand KV heads for GQA if needed
+        let full_k = self.expand_kv(&full_k)?;
+        let full_v = self.expand_kv(&full_v)?;
+
+        // Causal attention with the full key/value
+        let att = (q.matmul(&full_k.transpose(2, 3)?)? / (self.head_dim as f64).sqrt())?;
+        let att = att.narrow(3, full_k.dim(2)? - seq_len, seq_len)?;
         let att = candle_nn::ops::softmax(&att, candle_core::D::Minus1)?;
-        let out = att.matmul(&v)?;
+        let out = att.matmul(&full_v.narrow(1, full_v.dim(1)? - seq_len, seq_len)?)?;
         let out = out.reshape((b_sz, seq_len, self.n_heads * self.head_dim))?;
 
-        // Row-parallel: partial sum
         let out = self.o_proj.forward(&out)?;
 
-        // Tensor Parallelism: All-Reduce to synchronize GPUs
-        // self.dist.all_reduce(&out)
-        Ok(out)
+        // Tensor Parallelism: All-Reduce to synchronize across GPUs
+        self.dist.all_reduce(&out)
+    }
+
+    /// Expand KV heads from n_kv_heads to n_heads for GQA
+    fn expand_kv(&self, tensor: &Tensor) -> Result<Tensor> {
+        let kv_heads = tensor.dim(2)?;
+        if kv_heads == self.n_heads {
+            return Ok(tensor.clone());
+        }
+        let group_size = self.n_heads / kv_heads;
+        let mut heads = Vec::with_capacity(self.n_heads);
+        for h in 0..kv_heads {
+            let h_t = tensor.narrow(2, h, 1)?;
+            for _ in 0..group_size {
+                heads.push(h_t.clone());
+            }
+        }
+        Tensor::cat(&heads, 2)
     }
 }
 
@@ -91,7 +135,6 @@ pub struct LlamaMLP {
     gate_proj: candle_nn::Linear,
     up_proj: candle_nn::Linear,
     down_proj: candle_nn::Linear,
-    #[allow(dead_code)]
     dist: Arc<DistributedContext>,
 }
 
@@ -117,8 +160,7 @@ impl LlamaMLP {
         let out = self.down_proj.forward(&x)?;
 
         // Tensor Parallelism: All-Reduce to synchronize GPUs
-        // self.dist.all_reduce(&out)
-        Ok(out)
+        self.dist.all_reduce(&out)
     }
 }
 
@@ -153,10 +195,15 @@ impl LlamaDecoderLayer {
         })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let residual = x;
         let x = self.input_layernorm.forward(x)?;
-        let x = (self.self_attn.forward(&x, index)? + residual)?;
+        let x = (self.self_attn.forward(&x, index, cache.as_deref_mut())? + residual)?;
         let residual = &x;
         let x = self.post_attention_layernorm.forward(&x)?;
         let x = (self.mlp.forward(&x)? + residual)?;
@@ -234,7 +281,12 @@ impl LlamaModel {
         })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let mut x = x.clone();
 
         if let Some(embed) = &self.embed_tokens {
@@ -242,7 +294,7 @@ impl LlamaModel {
         }
 
         for layer in &self.layers {
-            x = layer.forward(&x, index)?;
+            x = layer.forward(&x, index, cache.as_deref_mut())?;
         }
 
         if let Some(norm) = &self.norm {
