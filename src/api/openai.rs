@@ -47,6 +47,20 @@ pub struct ChatCompletionRequest {
     pub max_tokens: Option<usize>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
+    pub top_k: Option<usize>,
+    pub stop: Option<StopCondition>,
+    pub logit_bias: Option<std::collections::HashMap<String, f32>>,
+    pub best_of: Option<usize>,
+    pub frequency_penalty: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub seed: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum StopCondition {
+    Single(String),
+    Multiple(Vec<String>),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -243,6 +257,34 @@ pub async fn chat_completions(
     };
 
     let max_tokens = payload.max_tokens.unwrap_or(50);
+    let temperature = payload.temperature.unwrap_or(1.0);
+    let top_p = payload.top_p.unwrap_or(1.0);
+    let top_k = payload.top_k;
+    let frequency_penalty = payload.frequency_penalty.unwrap_or(0.0);
+    let presence_penalty = payload.presence_penalty.unwrap_or(0.0);
+    let best_of = payload.best_of.unwrap_or(1).max(1);
+    let seed = payload.seed;
+
+    // Convert logit_bias from token string -> f32 to token id -> f32
+    let logit_bias = payload.logit_bias.map(|bias_map| {
+        bias_map
+            .into_iter()
+            .filter_map(|(token_str, bias)| token_str.parse::<u32>().ok().map(|id| (id, bias)))
+            .collect::<std::collections::HashMap<u32, f32>>()
+    });
+
+    // Convert stop strings to token IDs
+    let stop_strings: Vec<String> = match payload.stop {
+        Some(StopCondition::Single(s)) => vec![s],
+        Some(StopCondition::Multiple(v)) => v,
+        None => Vec::new(),
+    };
+    let stop_token_ids = stop_strings
+        .iter()
+        .filter_map(|s| state.tokenizer.as_ref().map(|tk| tk.encode(s).unwrap_or_default()))
+        .filter(|tokens| !tokens.is_empty())
+        .collect();
+
     let created = unix_now();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
@@ -255,8 +297,15 @@ pub async fn chat_completions(
         is_prefill: true,
         cached_prefix_len: 0,
         prefill_cursor: 0,
-        temperature: payload.temperature.unwrap_or(1.0),
-        top_p: payload.top_p.unwrap_or(1.0),
+        temperature,
+        top_p,
+        top_k,
+        frequency_penalty,
+        presence_penalty,
+        logit_bias,
+        stop_token_ids,
+        best_of,
+        seed,
         token_sender: Some(tx),
         deadline: Some(tokio::time::Instant::now() + tokio::time::Duration::from_secs(300)),
         grammar_processor: None,

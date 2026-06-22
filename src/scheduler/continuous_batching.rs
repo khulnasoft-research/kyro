@@ -15,6 +15,15 @@ pub struct Request {
     pub prefill_cursor: usize,
     pub temperature: f32,
     pub top_p: f32,
+    pub top_k: Option<usize>,
+    pub frequency_penalty: f32,
+    pub presence_penalty: f32,
+    pub logit_bias: Option<std::collections::HashMap<u32, f32>>,
+    /// Stop sequences as token IDs (converted from text when tokenizer is available).
+    pub stop_token_ids: Vec<Vec<u32>>,
+    /// Best-of: generate this many completions and return the best.
+    pub best_of: usize,
+    pub seed: Option<u64>,
     /// Channel to send newly generated tokens back to the API for streaming.
     pub token_sender: Option<tokio::sync::mpsc::UnboundedSender<u32>>,
     /// Deadline for request cancellation. None means no timeout.
@@ -191,6 +200,13 @@ mod tests {
             prefill_cursor: 0,
             temperature: 1.0,
             top_p: 1.0,
+            top_k: None,
+            frequency_penalty: 0.0,
+            presence_penalty: 0.0,
+            logit_bias: None,
+            stop_token_ids: Vec::new(),
+            best_of: 1,
+            seed: None,
             token_sender: None,
             deadline: None,
             grammar_processor: None,
