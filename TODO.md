@@ -57,7 +57,7 @@ The repository already contains foundational work for:
 
 - [x] Expand speculative decoding support to include n-gram, suffix, EAGLE, DFlash, and other multi-step heuristics
 - [x] Add support for parallel sampling / speculative sampling algorithms
-- [ ] Add beam search and other high-throughput decoding strategies
+- [x] Add beam search and other high-throughput decoding strategies
 - [ ] Add support for constrained and structured decoding with grammar / prefix constraints
 
 ## TODO: API, integration, and usability
