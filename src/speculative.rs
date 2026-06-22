@@ -2,7 +2,108 @@ use crate::model::kv_cache::CacheContext;
 use crate::model::loader::{LoadedModel, ModelForward};
 use crate::model::model_registry::ModelInstance;
 use candle_core::{Result, Tensor};
+use candle_nn::ops::log_softmax;
 use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct Beam {
+    pub tokens: Vec<u32>,
+    pub score: f64,
+    pub finished: bool,
+}
+
+impl Beam {
+    pub fn new(prompt: Vec<u32>) -> Self {
+        Self { tokens: prompt, score: 0.0, finished: false }
+    }
+}
+
+pub struct BeamSearchDecoder {
+    pub model: Box<dyn ModelForward + Send>,
+    pub num_beams: usize,
+    pub length_penalty: f64,
+    pub max_new_tokens: usize,
+    pub eos_token_id: u32,
+}
+
+impl BeamSearchDecoder {
+    pub fn new(
+        model: Box<dyn ModelForward + Send>,
+        num_beams: usize,
+        max_new_tokens: usize,
+        eos_token_id: u32,
+    ) -> Self {
+        Self {
+            model,
+            num_beams,
+            length_penalty: 1.0,
+            max_new_tokens,
+            eos_token_id,
+        }
+    }
+
+    pub fn with_length_penalty(mut self, penalty: f64) -> Self {
+        self.length_penalty = penalty;
+        self
+    }
+
+    pub fn decode(&mut self, prompt: &[u32]) -> Result<Vec<u32>> {
+        let device = &candle_core::Device::Cpu;
+        let mut beams: Vec<Beam> = (0..self.num_beams)
+            .map(|_| Beam::new(prompt.to_vec()))
+            .collect();
+
+        for _step in 0..self.max_new_tokens {
+            let mut all_candidates: Vec<(f64, Vec<u32>)> = Vec::new();
+
+            for beam in beams.iter_mut() {
+                if beam.finished {
+                    continue;
+                }
+
+                let input_f32: Vec<f32> = beam.tokens.iter().map(|&t| t as f32).collect();
+                let input = Tensor::from_slice(&input_f32, (1, 1, beam.tokens.len()), device)?;
+                let logits = self.model.forward(&input, 0, None)?;
+                let last_logits = logits.squeeze(1)?.squeeze(0)?;
+
+                let log_probs = log_softmax(&last_logits, 0)?;
+                let mut scores: Vec<(f64, u32)> = log_probs.to_vec1::<f32>()?
+                    .iter().enumerate()
+                    .map(|(i, &v)| (v as f64, i as u32))
+                    .collect();
+                scores.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+                for &(log_prob, token_id) in scores.iter().take(self.num_beams) {
+                    let mut new_tokens = beam.tokens.clone();
+                    new_tokens.push(token_id);
+                    let len = new_tokens.len() as f64;
+                    let score = (beam.score + log_prob) / len.powf(self.length_penalty);
+                    all_candidates.push((score, new_tokens));
+                }
+            }
+
+            if all_candidates.is_empty() {
+                break;
+            }
+
+            all_candidates.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            all_candidates.truncate(self.num_beams);
+
+            beams.clear();
+            for (score, tokens) in all_candidates {
+                let finished = tokens.last() == Some(&self.eos_token_id);
+                beams.push(Beam { tokens, score, finished });
+            }
+
+            if beams.iter().all(|b| b.finished) {
+                break;
+            }
+        }
+
+        beams.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(beams.into_iter().next().map(|b| b.tokens).unwrap_or_else(|| prompt.to_vec()))
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DraftStrategy {
@@ -261,5 +362,55 @@ mod tests {
         assert_eq!(DraftStrategy::DraftModel, DraftStrategy::DraftModel);
         assert_eq!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 3 });
         assert_ne!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 4 });
+    }
+
+    #[test]
+    fn test_beam_creation() {
+        let beam = Beam::new(vec![1, 2, 3]);
+        assert_eq!(beam.tokens, vec![1, 2, 3]);
+        assert!(!beam.finished);
+        assert_eq!(beam.score, 0.0);
+    }
+
+    #[test]
+    fn test_beam_search_decoder_creation() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let decoder = BeamSearchDecoder::new(
+            Box::new(model),
+            4,
+            50,
+            2,
+        );
+        assert_eq!(decoder.num_beams, 4);
+        assert_eq!(decoder.max_new_tokens, 50);
+        assert_eq!(decoder.eos_token_id, 2);
+    }
+
+    #[test]
+    fn test_beam_search_with_length_penalty() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let decoder = BeamSearchDecoder::new(
+            Box::new(model),
+            3,
+            10,
+            2,
+        ).with_length_penalty(0.6);
+        assert_eq!(decoder.length_penalty, 0.6);
+    }
+
+    #[test]
+    fn test_beam_search_decode_returns_tokens() {
+        let cfg = LlamaConfig::llama_7b();
+        let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
+        let mut decoder = BeamSearchDecoder::new(
+            Box::new(model),
+            2,
+            5,
+            2,
+        );
+        let result = decoder.decode(&[1, 2, 3]).unwrap();
+        assert!(result.len() >= 3, "should keep prompt tokens");
     }
 }
