@@ -47,6 +47,10 @@ pub struct Cli {
     /// Path to the tokenizer.json file (auto-detected from model-path if not specified)
     #[arg(long = "tokenizer-path", env = "KYRO_TOKENIZER_PATH")]
     pub tokenizer_path: Option<PathBuf>,
+
+    /// Execution mode: eager, full-graph, piecewise, kernel-dispatch
+    #[arg(long = "execution-mode", default_value = "eager")]
+    pub execution_mode: String,
 }
 
 impl Cli {

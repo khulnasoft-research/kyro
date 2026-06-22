@@ -11,7 +11,9 @@ mod worker;
 use crate::api::tokenizer::LuminaTokenizer;
 use crate::config::Cli;
 use crate::distributed::DistributedContext;
-use crate::model::loader::{LoadedModel, ModelLoader};
+use crate::model::engine::{EngineModel, ExecutionMode};
+use crate::model::loader::{LoadedModel, ModelForward, ModelLoader};
+use crate::model::model_registry::ModelInstance;
 use crate::scheduler::block_manager::BlockManager;
 use crate::scheduler::continuous_batching::Scheduler;
 use crate::worker::Worker;
@@ -62,51 +64,68 @@ async fn main() -> Result<()> {
     info!("Scheduler and metrics initialized");
 
     // 3. Load Model — from CLI arg or env var, or fallback to dummy
-    let loaded_model = if let Some(ref mp) = cli.model_path {
+    let execution_mode = match cli.execution_mode.as_str() {
+        "full-graph" => ExecutionMode::FullGraph,
+        "piecewise" => ExecutionMode::Piecewise,
+        "kernel-dispatch" => ExecutionMode::KernelDispatch,
+        _ => ExecutionMode::Eager,
+    };
+
+    let loaded_model: Box<dyn ModelForward + Send> = if let Some(ref mp) = cli.model_path {
         info!(path = %mp.display(), "Loading model");
         let loader = ModelLoader::new(mp).context("Failed to initialize model loader")?;
-        loader
+        info!(architecture = ?loader.architecture(), "Detected model architecture");
+        let model = loader
             .load(&device, dist.clone())
-            .context("Failed to load model")?
+            .context("Failed to load model")?;
+        Box::new(EngineModel::new(Box::new(model), device.clone(), execution_mode))
     } else {
         info!("No model path provided; using mock model");
         let cfg = model::config::LlamaConfig::llama_7b();
-        LoadedModel::Standard(model::llama::LlamaModel::dummy(&cfg)?)
+        Box::new(EngineModel::new(
+            Box::new(LoadedModel::Standard(ModelInstance::Llama(model::llama::LlamaModel::dummy(&cfg)?))),
+            device.clone(),
+            execution_mode,
+        ))
     };
     info!("Model loaded");
 
     // 3b. Load Tokenizer
-    let tokenizer_path: Option<PathBuf> = cli.tokenizer_path.or_else(|| {
-        cli.model_path.as_ref().map(|mp| {
-            let candidate = mp.join("tokenizer.json");
-            if candidate.exists() {
-                candidate
-            } else {
-                mp.to_path_buf()
-            }
-        })
-    });
+    let tokenizer_path: Option<PathBuf> = if let Some(path) = cli.tokenizer_path.clone() {
+        Some(path)
+    } else if let Some(ref mp) = cli.model_path {
+        let loader = ModelLoader::new(mp).ok();
+        if let Some(loader) = loader {
+            loader.detect_tokenizer_path()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
-    let tokenizer = tokenizer_path
-        .as_ref()
-        .filter(|p| p.join("tokenizer.json").exists() || p.extension().is_some_and(|e| e == "json"))
-        .and_then(|tp| {
-            let path = if tp.is_dir() {
-                tp.join("tokenizer.json")
-            } else {
-                tp.clone()
-            };
-            match LuminaTokenizer::from_file(&path) {
-                Ok(tk) => {
-                    info!(path = %path.display(), "Tokenizer loaded");
-                    Some(tk)
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "Failed to load tokenizer, using fallback");
-                    None
-                }
+    let tokenizer = tokenizer_path.as_ref().and_then(|tp| {
+        let path = if tp.is_dir() {
+            tp.join("tokenizer.json")
+        } else {
+            tp.clone()
+        };
+
+        if !path.exists() {
+            return None;
+        }
+
+        match LuminaTokenizer::from_file(&path) {
+            Ok(tk) => {
+                info!(path = %path.display(), "Tokenizer loaded");
+                Some(tk)
             }
-        });
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to load tokenizer, using fallback");
+                None
+            }
+        }
+    });
 
     if tokenizer.is_none() {
         info!("No tokenizer loaded; using fallback token format");
