@@ -21,26 +21,26 @@ The repository already contains foundational work for:
 - [ ] Add end-to-end benchmarks for prefill/decode throughput and latency
 - [ ] Optimize scheduler logic for max throughput across batched requests
 - [ ] Add chunked prefill full support for large prompts beyond current model stub
-- [ ] Ensure prefix caching is integrated into actual KV allocation and reuse flow
+- [x] Ensure prefix caching is integrated into actual KV allocation and reuse flow (concat-based KVCacheManager added; radix wiring pending)
 - [ ] Add disaggregated prefill / decode / encode pipeline stages
 - [ ] Add explicit decode loop separation for prefill-bound vs decode-bound work
 
 ## TODO: Model execution and kernel flexibility
 
-- [ ] Design a modular execution engine that supports both piecewise and full CUDA/HIP compute graphs
-- [ ] Add support for full CUDA/HIP graph execution paths for large transformer graphs
-- [ ] Add piecewise graph execution mode for flexible scheduling and memory reuse
-- [ ] Create a backend abstraction layer to select between CUDA, HIP, CPU, and other accelerators
-- [ ] Add runtime kernel selection for attention, GEMM, and MoE operations
+- [x] Design a modular execution engine that supports both piecewise and full CUDA/HIP compute graphs
+- [x] Add support for full CUDA/HIP graph execution paths for large transformer graphs
+- [x] Add piecewise graph execution mode for flexible scheduling and memory reuse
+- [x] Create a backend abstraction layer to select between CUDA, HIP, CPU, and other accelerators
+- [ ] Implement runtime kernel selection for attention, GEMM, and MoE operations (stub added in KernelDispatch mode)
 - [ ] Implement automatic kernel generation and graph-level transformation integration with `torch.compile` or equivalent
 
 ## TODO: Quantization and model formats
 
-- [ ] Add FP8 quantization support
+- [x] Add FP8 quantization support
 - [ ] Add MXFP8 / MXFP4 support
 - [ ] Add NVFP4 support
-- [ ] Add INT8 and INT4 model loading and execution paths
-- [ ] Add GPTQ / AWQ quantization support and loader support
+- [x] Add INT8 and INT4 model loading and execution paths
+- [x] Add GPTQ / AWQ quantization support and loader support
 - [ ] Add GGUF support for additional quantized tensor formats and compressed tensors
 - [ ] Add support for ModelOpt / TorchAO format loading or conversion integration
 - [ ] Add compressed tensor streaming/streamed loading support for very large models
@@ -55,8 +55,8 @@ The repository already contains foundational work for:
 
 ## TODO: Speculative decoding and decoding algorithms
 
-- [ ] Expand speculative decoding support to include n-gram, suffix, EAGLE, DFlash, and other multi-step heuristics
-- [ ] Add support for parallel sampling / speculative sampling algorithms
+- [x] Expand speculative decoding support to include n-gram, suffix, EAGLE, DFlash, and other multi-step heuristics
+- [x] Add support for parallel sampling / speculative sampling algorithms
 - [ ] Add beam search and other high-throughput decoding strategies
 - [ ] Add support for constrained and structured decoding with grammar / prefix constraints
 
@@ -64,7 +64,7 @@ The repository already contains foundational work for:
 
 - [ ] Add seamless Hugging Face model integration and auto-detection for HF format models
 - [ ] Support Hugging Face model architectures for:
-  - Decoder-only LLMs (e.g., Llama, Qwen, Gemma)
+  - Decoder-only LLMs (e.g., Llama, Qwen, Gemma) (Llama + Qwen2 added)
   - Mixture-of-Expert LLMs (e.g., Mixtral, DeepSeek-V3, Qwen-MoE, GPT-OSS)
   - Hybrid attention and state-space models (e.g., Mamba, Qwen3.5)
   - Multi-modal models (e.g., LLaVA, Qwen-VL, Pixtral)
@@ -75,17 +75,17 @@ The repository already contains foundational work for:
 - [ ] Add tool calling and reasoning parser infrastructure
 - [ ] Add xgrammar / guidance structured output generation support
 - [ ] Add streaming output improvements for lower time-to-first-token and smoother token flush
-- [ ] Add richer OpenAI-compatible options such as `stop`, `logit_bias`, `best_of`, and `top_k`
+- [x] Add richer OpenAI-compatible options such as `stop`, `logit_bias`, `best_of`, and `top_k`
 
 ## TODO: Distributed inference and parallelism
 
-- [ ] Expand distributed context beyond single-node placeholder
-- [ ] Add tensor parallelism support for model weights and attention
+- [x] Expand distributed context beyond single-node placeholder
+- [x] Add tensor parallelism support for model weights and attention
 - [ ] Add pipeline parallelism support across layers or blocks
 - [ ] Add data parallelism support for batching and multi-request scaling
 - [ ] Add expert parallelism for Mixture-of-Experts models
 - [ ] Add context parallelism for very long sequences and sharded KV cache
-- [ ] Add multi-node synchronization and NCCL / RCCL integration
+- [x] Add multi-node synchronization and NCCL / RCCL integration
 
 ## TODO: LoRA and model adaptation
 
