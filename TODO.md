@@ -110,3 +110,6 @@ The repository already contains foundational work for:
 ## Notes
 
 This TODO list is intended to capture requested high-level capabilities and the current implementation gaps in the existing codebase. The next step is to break these items into implementation issues or project cards with concrete work packages for each major area.
+
+### Implementation status
+- AWQ: Properly implemented `AwqLinear` with int32-level 4-bit unpacking, `g_idx` support, and `AwqLoader` for HuggingFace safetensors (2026-06-22)
