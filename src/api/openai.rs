@@ -281,7 +281,12 @@ pub async fn chat_completions(
     };
     let stop_token_ids = stop_strings
         .iter()
-        .filter_map(|s| state.tokenizer.as_ref().map(|tk| tk.encode(s).unwrap_or_default()))
+        .filter_map(|s| {
+            state
+                .tokenizer
+                .as_ref()
+                .map(|tk| tk.encode(s).unwrap_or_default())
+        })
         .filter(|tokens| !tokens.is_empty())
         .collect();
 

@@ -78,12 +78,18 @@ async fn main() -> Result<()> {
         let model = loader
             .load(&device, dist.clone())
             .context("Failed to load model")?;
-        Box::new(EngineModel::new(Box::new(model), device.clone(), execution_mode))
+        Box::new(EngineModel::new(
+            Box::new(model),
+            device.clone(),
+            execution_mode,
+        ))
     } else {
         info!("No model path provided; using mock model");
         let cfg = model::config::LlamaConfig::llama_7b();
         Box::new(EngineModel::new(
-            Box::new(LoadedModel::Standard(ModelInstance::Llama(model::llama::LlamaModel::dummy(&cfg)?))),
+            Box::new(LoadedModel::Standard(ModelInstance::Llama(
+                model::llama::LlamaModel::dummy(&cfg)?,
+            ))),
             device.clone(),
             execution_mode,
         ))
