@@ -1,11 +1,11 @@
 use crate::model::kv_cache::CacheContext;
 use crate::model::loader::{LoadedModel, ModelForward};
-use crate::model::model_registry::ModelInstance;
 use candle_core::{Result, Tensor};
 use candle_nn::ops::log_softmax;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Beam {
     pub tokens: Vec<u32>,
     pub score: f64,
@@ -13,11 +13,17 @@ pub struct Beam {
 }
 
 impl Beam {
+    #[allow(dead_code)]
     pub fn new(prompt: Vec<u32>) -> Self {
-        Self { tokens: prompt, score: 0.0, finished: false }
+        Self {
+            tokens: prompt,
+            score: 0.0,
+            finished: false,
+        }
     }
 }
 
+#[allow(dead_code)]
 pub struct BeamSearchDecoder {
     pub model: Box<dyn ModelForward + Send>,
     pub num_beams: usize,
@@ -27,6 +33,7 @@ pub struct BeamSearchDecoder {
 }
 
 impl BeamSearchDecoder {
+    #[allow(dead_code)]
     pub fn new(
         model: Box<dyn ModelForward + Send>,
         num_beams: usize,
@@ -42,11 +49,13 @@ impl BeamSearchDecoder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_length_penalty(mut self, penalty: f64) -> Self {
         self.length_penalty = penalty;
         self
     }
 
+    #[allow(dead_code)]
     pub fn decode(&mut self, prompt: &[u32]) -> Result<Vec<u32>> {
         let device = &candle_core::Device::Cpu;
         let mut beams: Vec<Beam> = (0..self.num_beams)
@@ -67,11 +76,15 @@ impl BeamSearchDecoder {
                 let last_logits = logits.squeeze(1)?.squeeze(0)?;
 
                 let log_probs = log_softmax(&last_logits, 0)?;
-                let mut scores: Vec<(f64, u32)> = log_probs.to_vec1::<f32>()?
-                    .iter().enumerate()
+                let mut scores: Vec<(f64, u32)> = log_probs
+                    .to_vec1::<f32>()?
+                    .iter()
+                    .enumerate()
                     .map(|(i, &v)| (v as f64, i as u32))
                     .collect();
-                scores.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                scores.sort_unstable_by(|a, b| {
+                    b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal)
+                });
 
                 for &(log_prob, token_id) in scores.iter().take(self.num_beams) {
                     let mut new_tokens = beam.tokens.clone();
@@ -86,13 +99,19 @@ impl BeamSearchDecoder {
                 break;
             }
 
-            all_candidates.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            all_candidates.sort_unstable_by(|a, b| {
+                b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal)
+            });
             all_candidates.truncate(self.num_beams);
 
             beams.clear();
             for (score, tokens) in all_candidates {
                 let finished = tokens.last() == Some(&self.eos_token_id);
-                beams.push(Beam { tokens, score, finished });
+                beams.push(Beam {
+                    tokens,
+                    score,
+                    finished,
+                });
             }
 
             if beams.iter().all(|b| b.finished) {
@@ -100,12 +119,21 @@ impl BeamSearchDecoder {
             }
         }
 
-        beams.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        Ok(beams.into_iter().next().map(|b| b.tokens).unwrap_or_else(|| prompt.to_vec()))
+        beams.sort_unstable_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Ok(beams
+            .into_iter()
+            .next()
+            .map(|b| b.tokens)
+            .unwrap_or_else(|| prompt.to_vec()))
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum DraftStrategy {
     /// Use a smaller draft model (classic speculative decoding)
     DraftModel,
@@ -115,6 +143,7 @@ pub enum DraftStrategy {
     Parallel,
 }
 
+#[allow(dead_code)]
 pub struct SpeculativeDecoder {
     pub target_model: LoadedModel,
     pub draft_model: Option<LoadedModel>,
@@ -124,7 +153,12 @@ pub struct SpeculativeDecoder {
 }
 
 impl SpeculativeDecoder {
-    pub fn new(target_model: LoadedModel, draft_model: Option<LoadedModel>, lookahead: usize) -> Self {
+    #[allow(dead_code)]
+    pub fn new(
+        target_model: LoadedModel,
+        draft_model: Option<LoadedModel>,
+        lookahead: usize,
+    ) -> Self {
         Self {
             target_model,
             draft_model,
@@ -134,6 +168,7 @@ impl SpeculativeDecoder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_ngram(target_model: LoadedModel, lookahead: usize, order: usize) -> Self {
         Self {
             target_model,
@@ -144,6 +179,7 @@ impl SpeculativeDecoder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_parallel(target_model: LoadedModel, lookahead: usize) -> Self {
         Self {
             target_model,
@@ -155,6 +191,7 @@ impl SpeculativeDecoder {
     }
 
     /// Build n-gram table from a corpus of token sequences.
+    #[allow(dead_code)]
     pub fn build_ngram_table(&mut self, corpus: &[Vec<u32>], order: usize) {
         self.ngram_table.clear();
         for seq in corpus {
@@ -174,18 +211,21 @@ impl SpeculativeDecoder {
         &mut self,
         input: &Tensor,
         index: usize,
-        mut cache: Option<&mut CacheContext>,
+        #[allow(unused_mut)] mut cache: Option<&mut CacheContext>,
         context_tokens: &[u32],
     ) -> Result<Vec<u32>> {
         match self.strategy {
             DraftStrategy::DraftModel => {
-                let model = self.draft_model.as_mut()
+                let model = self
+                    .draft_model
+                    .as_mut()
                     .ok_or_else(|| candle_core::Error::Msg("draft model required".into()))?;
                 let device = input.device();
                 let mut draft_tokens = Vec::with_capacity(self.lookahead);
                 let mut current_input = input.clone();
 
                 for i in 0..self.lookahead {
+                    #[allow(clippy::needless_option_as_deref)]
                     let logits = model.forward(&current_input, index + i, cache.as_deref_mut())?;
                     let next_token = logits
                         .squeeze(1)?
@@ -226,7 +266,10 @@ impl SpeculativeDecoder {
                 let last_token = context_tokens.last().copied().unwrap_or(0);
                 let repeated = vec![last_token; self.lookahead];
                 let draft_tensor = Tensor::new(repeated.as_slice(), device)?.unsqueeze(0)?;
-                let logits = self.target_model.forward(&draft_tensor, index, cache.as_deref_mut())?;
+                #[allow(clippy::needless_option_as_deref)]
+                let logits =
+                    self.target_model
+                        .forward(&draft_tensor, index, cache.as_deref_mut())?;
                 let mut draft_tokens = Vec::with_capacity(self.lookahead);
                 for i in 0..self.lookahead {
                     let token = logits.get(i)?.argmax(0)?.to_scalar::<u32>()?;
@@ -242,21 +285,29 @@ impl SpeculativeDecoder {
         &mut self,
         input: &Tensor,
         index: usize,
-        mut cache: Option<&mut CacheContext>,
+        #[allow(unused_mut)] mut cache: Option<&mut CacheContext>,
         draft_tokens: &[u32],
     ) -> Result<Vec<u32>> {
         let device = input.device();
         let num_drafts = draft_tokens.len();
 
         if num_drafts == 0 {
-            let logits = self.target_model.forward(input, index, cache.as_deref_mut())?;
-            let token = logits.squeeze(1)?.squeeze(0)?.argmax(0)?.to_scalar::<u32>()?;
+            #[allow(clippy::needless_option_as_deref)]
+            let logits = self.target_model.forward(input, index, cache)?;
+            let token = logits
+                .squeeze(1)?
+                .squeeze(0)?
+                .argmax(0)?
+                .to_scalar::<u32>()?;
             return Ok(vec![token]);
         }
 
         let draft_slice: Vec<u32> = draft_tokens.to_vec();
         let draft_tensor = Tensor::new(draft_slice.as_slice(), device)?.unsqueeze(0)?;
-        let target_logits = self.target_model.forward(&draft_tensor, index, cache.as_deref_mut())?;
+        #[allow(clippy::needless_option_as_deref)]
+        let target_logits =
+            self.target_model
+                .forward(&draft_tensor, index, cache.as_deref_mut())?;
 
         let mut accepted = Vec::new();
         for (i, &draft_token) in draft_tokens.iter().enumerate() {
@@ -270,23 +321,33 @@ impl SpeculativeDecoder {
         }
 
         if accepted.is_empty() {
-            let logits = self.target_model.forward(input, index, cache.as_deref_mut())?;
-            let token = logits.squeeze(1)?.squeeze(0)?.argmax(0)?.to_scalar::<u32>()?;
+            #[allow(clippy::needless_option_as_deref)]
+            let logits = self
+                .target_model
+                .forward(input, index, cache.as_deref_mut())?;
+            let token = logits
+                .squeeze(1)?
+                .squeeze(0)?
+                .argmax(0)?
+                .to_scalar::<u32>()?;
             accepted.push(token);
         }
 
         Ok(accepted)
     }
 
+    #[allow(dead_code)]
     pub fn step(
         &mut self,
         input: &Tensor,
         index: usize,
-        mut cache: Option<&mut CacheContext>,
+        #[allow(unused_mut)] mut cache: Option<&mut CacheContext>,
         context_tokens: &[u32],
     ) -> Result<Vec<u32>> {
-        let draft_tokens = self.generate_drafts(input, index, cache.as_deref_mut(), context_tokens)?;
-        self.verify_drafts(input, index, cache, &draft_tokens)
+        let draft_tokens =
+            self.generate_drafts(input, index, cache.as_deref_mut(), context_tokens)?;
+        #[allow(clippy::needless_option_as_deref)]
+        self.verify_drafts(input, index, cache.as_deref_mut(), &draft_tokens)
     }
 }
 
@@ -295,6 +356,7 @@ mod tests {
     use super::*;
     use crate::model::config::LlamaConfig;
     use crate::model::llama::LlamaModel;
+    use crate::model::model_registry::ModelInstance;
     use candle_core::{DType, Device};
 
     fn make_dummy_decoder(lookahead: usize) -> SpeculativeDecoder {
@@ -360,8 +422,14 @@ mod tests {
     #[test]
     fn test_draft_strategy_equality() {
         assert_eq!(DraftStrategy::DraftModel, DraftStrategy::DraftModel);
-        assert_eq!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 3 });
-        assert_ne!(DraftStrategy::Ngram { order: 3 }, DraftStrategy::Ngram { order: 4 });
+        assert_eq!(
+            DraftStrategy::Ngram { order: 3 },
+            DraftStrategy::Ngram { order: 3 }
+        );
+        assert_ne!(
+            DraftStrategy::Ngram { order: 3 },
+            DraftStrategy::Ngram { order: 4 }
+        );
     }
 
     #[test]
@@ -376,12 +444,7 @@ mod tests {
     fn test_beam_search_decoder_creation() {
         let cfg = LlamaConfig::llama_7b();
         let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
-        let decoder = BeamSearchDecoder::new(
-            Box::new(model),
-            4,
-            50,
-            2,
-        );
+        let decoder = BeamSearchDecoder::new(Box::new(model), 4, 50, 2);
         assert_eq!(decoder.num_beams, 4);
         assert_eq!(decoder.max_new_tokens, 50);
         assert_eq!(decoder.eos_token_id, 2);
@@ -391,12 +454,7 @@ mod tests {
     fn test_beam_search_with_length_penalty() {
         let cfg = LlamaConfig::llama_7b();
         let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
-        let decoder = BeamSearchDecoder::new(
-            Box::new(model),
-            3,
-            10,
-            2,
-        ).with_length_penalty(0.6);
+        let decoder = BeamSearchDecoder::new(Box::new(model), 3, 10, 2).with_length_penalty(0.6);
         assert_eq!(decoder.length_penalty, 0.6);
     }
 
@@ -404,12 +462,7 @@ mod tests {
     fn test_beam_search_decode_returns_tokens() {
         let cfg = LlamaConfig::llama_7b();
         let model = ModelInstance::Llama(LlamaModel::dummy(&cfg).unwrap());
-        let mut decoder = BeamSearchDecoder::new(
-            Box::new(model),
-            2,
-            5,
-            2,
-        );
+        let mut decoder = BeamSearchDecoder::new(Box::new(model), 2, 5, 2);
         let result = decoder.decode(&[1, 2, 3]).unwrap();
         assert!(result.len() >= 3, "should keep prompt tokens");
     }

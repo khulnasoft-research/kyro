@@ -18,7 +18,9 @@ impl RequestKVCache {
 }
 
 pub struct KVCacheManager {
+    #[allow(dead_code)]
     pub num_kv_heads: usize,
+    #[allow(dead_code)]
     pub head_dim: usize,
     pub request_caches: HashMap<u64, RequestKVCache>,
 }
@@ -33,7 +35,8 @@ impl KVCacheManager {
     }
 
     pub fn register_request(&mut self, request_id: u64) {
-        self.request_caches.insert(request_id, RequestKVCache::new());
+        self.request_caches
+            .insert(request_id, RequestKVCache::new());
     }
 
     pub fn unregister_request(&mut self, request_id: u64) {
@@ -42,12 +45,7 @@ impl KVCacheManager {
 
     /// Append K and V tensors for a request.
     /// Both key and value should be [batch, seq_len, num_kv_heads, head_dim].
-    pub fn append_kv(
-        &mut self,
-        request_id: u64,
-        key: &Tensor,
-        value: &Tensor,
-    ) -> Result<()> {
+    pub fn append_kv(&mut self, request_id: u64, key: &Tensor, value: &Tensor) -> Result<()> {
         let req_cache = self
             .request_caches
             .get_mut(&request_id)
@@ -104,7 +102,10 @@ pub struct CacheContext<'a> {
 
 impl<'a> CacheContext<'a> {
     pub fn new(manager: &'a mut KVCacheManager, request_id: u64) -> Self {
-        Self { manager, request_id }
+        Self {
+            manager,
+            request_id,
+        }
     }
 }
 

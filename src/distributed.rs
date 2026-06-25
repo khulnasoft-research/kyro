@@ -1,6 +1,6 @@
-use candle_core::{Device, Result, Tensor};
-use std::sync::Arc;
+use candle_core::{Result, Tensor};
 
+#[allow(dead_code)]
 pub enum Backend {
     Cpu,
     Cuda,
@@ -86,6 +86,7 @@ impl DistributedContext {
     }
 
     /// Split a dimension across the tensor parallel group.
+    #[allow(dead_code)]
     pub fn shard_dim(&self, tensor: &Tensor, dim: usize) -> Result<Tensor> {
         if self.world_size <= 1 {
             return Ok(tensor.clone());
@@ -97,6 +98,7 @@ impl DistributedContext {
     }
 
     /// Gather a sharded dimension back to the full size.
+    #[allow(dead_code)]
     pub fn gather_dim(&self, tensor: &Tensor, _dim: usize) -> Result<Tensor> {
         if self.world_size <= 1 {
             return Ok(tensor.clone());

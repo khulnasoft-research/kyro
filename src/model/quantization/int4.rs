@@ -37,7 +37,7 @@ impl Int4Linear {
 
         let weight_data: Vec<f32> = weight.flatten_all()?.to_vec1()?;
         let num_groups = in_features.div_ceil(group_size);
-        let mut qweight_data = vec![0u8; (out_features * in_features + 1) / 2];
+        let mut qweight_data = vec![0u8; (out_features * in_features).div_ceil(2)];
         let mut scales_data = vec![0.0f32; out_features * num_groups];
         let mut zeros_data = vec![0.0f32; out_features * num_groups];
         let mut values_4bit = vec![0u8; out_features * in_features];
@@ -75,7 +75,11 @@ impl Int4Linear {
 
         qweight_data = pack_i4(&values_4bit);
 
-        let qweight = Tensor::from_slice(&qweight_data, (out_features, (in_features + 1) / 2), device)?;
+        let qweight = Tensor::from_slice(
+            &qweight_data,
+            (out_features, in_features.div_ceil(2)),
+            device,
+        )?;
         let scales = Tensor::from_slice(&scales_data, (out_features, num_groups), device)?;
         let zeros = Tensor::from_slice(&zeros_data, (out_features, num_groups), device)?;
 
@@ -118,7 +122,9 @@ impl QuantizedLayer for Int4Linear {
 
         let scales_data: Vec<f32> = self.scales.flatten_all()?.to_vec1()?;
         let num_groups = scales_data.len() / out_features;
-        let zeros_data: Vec<f32> = self.zeros.as_ref()
+        let zeros_data: Vec<f32> = self
+            .zeros
+            .as_ref()
             .map(|z| z.flatten_all().unwrap().to_vec1().unwrap())
             .unwrap_or_else(|| vec![8.0f32; out_features * num_groups]);
 
@@ -158,7 +164,10 @@ mod tests {
         let q = Int4Linear::quantize(&weight, 4)?;
         let reconstructed = q.unpack_weights()?;
         let reconstructed_f32 = reconstructed.to_dtype(DType::F32)?;
-        let diff = (weight.clone() - reconstructed_f32)?.abs()?.sum_all()?.to_scalar::<f32>()?;
+        let diff = (weight.clone() - reconstructed_f32)?
+            .abs()?
+            .sum_all()?
+            .to_scalar::<f32>()?;
         // With 4-bit quantization, expect bounded error
         assert!(diff < 20.0, "quantization error too large: {}", diff);
         Ok(())

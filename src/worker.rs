@@ -147,8 +147,13 @@ impl Worker {
 
                 // Apply frequency and presence penalties
                 if item.frequency_penalty != 0.0 || item.presence_penalty != 0.0 {
-                    if let Some(req) = self.scheduler.read().await
-                        .running_queue.iter().find(|r| r.id == item.req_id)
+                    if let Some(req) = self
+                        .scheduler
+                        .read()
+                        .await
+                        .running_queue
+                        .iter()
+                        .find(|r| r.id == item.req_id)
                     {
                         let mut penalty_mask = vec![0.0f32; logits.dim(logits.dims().len() - 1)?];
                         for &t in &req.generated_tokens {
@@ -160,10 +165,12 @@ impl Worker {
                         for &t in &req.generated_tokens {
                             let idx = t as usize;
                             if idx < penalty_mask.len() {
-                                penalty_mask[idx] = penalty_mask[idx].min(0.0) + item.presence_penalty;
+                                penalty_mask[idx] =
+                                    penalty_mask[idx].min(0.0) + item.presence_penalty;
                             }
                         }
-                        let mask = Tensor::from_slice(&penalty_mask, (penalty_mask.len(),), device)?;
+                        let mask =
+                            Tensor::from_slice(&penalty_mask, (penalty_mask.len(),), device)?;
                         logits = (&logits + &mask.unsqueeze(0)?)?;
                     }
                 }
@@ -352,12 +359,14 @@ struct WorkItem {
     logit_bias: Option<std::collections::HashMap<u32, f32>>,
     is_prefill: bool,
     needs_cache_lookup: bool,
+    #[allow(dead_code)]
     seed: Option<u64>,
 }
 
 struct ComputeResult {
     req_id: u64,
     token: u32,
+    #[allow(dead_code)]
     is_last_chunk: bool,
     is_stop: bool,
 }

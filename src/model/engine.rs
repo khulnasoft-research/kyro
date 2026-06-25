@@ -18,6 +18,7 @@ pub enum ExecutionMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum BackendType {
     Auto,
     Cuda,
@@ -31,6 +32,7 @@ pub struct GraphCapture {
     pub replay_buffer: HashMap<String, GraphReplay>,
 }
 
+#[allow(dead_code)]
 pub struct GraphReplay {
     pub name: String,
     pub inputs: Vec<Tensor>,
@@ -46,10 +48,12 @@ impl GraphCapture {
         }
     }
 
+    #[allow(dead_code)]
     pub fn begin_capture(&mut self) {
         self.is_capturing = true;
     }
 
+    #[allow(dead_code)]
     pub fn end_capture(&mut self) {
         self.is_capturing = false;
     }
@@ -57,8 +61,10 @@ impl GraphCapture {
 
 pub struct ExecutionEngine {
     pub mode: ExecutionMode,
+    #[allow(dead_code)]
     pub backend: BackendType,
     pub graph_capture: GraphCapture,
+    #[allow(dead_code)]
     pub device: Device,
 }
 
@@ -77,26 +83,32 @@ impl ExecutionEngine {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_cuda(&self) -> bool {
         matches!(self.backend, BackendType::Cuda)
     }
 
+    #[allow(dead_code)]
     pub fn is_hip(&self) -> bool {
         matches!(self.backend, BackendType::Hip)
     }
 
+    #[allow(dead_code)]
     pub fn is_metal(&self) -> bool {
         matches!(self.backend, BackendType::Metal)
     }
 
+    #[allow(dead_code)]
     pub fn set_mode(&mut self, mode: ExecutionMode) {
         self.mode = mode;
     }
 
+    #[allow(dead_code)]
     pub fn begin_graph_capture(&mut self) {
         self.graph_capture.begin_capture();
     }
 
+    #[allow(dead_code)]
     pub fn end_graph_capture(&mut self) {
         self.graph_capture.end_capture();
     }

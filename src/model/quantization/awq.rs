@@ -25,11 +25,19 @@ impl AwqLinear {
         bias: Option<Tensor>,
         group_size: usize,
     ) -> Self {
-        Self { qweight, qzeros, scales, g_idx, bias, group_size }
+        Self {
+            qweight,
+            qzeros,
+            scales,
+            g_idx,
+            bias,
+            group_size,
+        }
     }
 }
 
 /// Unpack a single i32 word containing 8 consecutive 4-bit values.
+#[allow(dead_code)]
 fn unpack_i32_word(word: i32) -> [u8; 8] {
     let w = word as u32;
     [
@@ -78,7 +86,9 @@ impl QuantizedLayer for AwqLinear {
         };
 
         // Unpack g_idx if present
-        let g_idx_data: Option<Vec<i32>> = self.g_idx.as_ref()
+        let g_idx_data: Option<Vec<i32>> = self
+            .g_idx
+            .as_ref()
             .map(|g| g.flatten_all().unwrap().to_vec1().unwrap());
 
         let mut weight_f32 = vec![0.0f32; out_features * in_features];
@@ -90,7 +100,8 @@ impl QuantizedLayer for AwqLinear {
                 let word = qweight_data[row * weight_shape[1] + word_idx];
                 let q_val = unpack_i32_word(word)[nibble];
 
-                let group = g_idx_data.as_ref()
+                let group = g_idx_data
+                    .as_ref()
                     .map(|g| g[col] as usize)
                     .unwrap_or(col / self.group_size);
 
@@ -138,16 +149,21 @@ impl AwqLoader {
     #[allow(dead_code)]
     pub fn load_linear(&self, name: &str, device: &Device) -> AResult<AwqLinear> {
         let files = self.collect_safetensors()?;
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&files, DType::F32, device)?
-        };
+        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&files, DType::F32, device)? };
 
         let qweight = vb.get(0, &format!("{}.qweight", name))?;
         let qzeros = vb.get(0, &format!("{}.qzeros", name))?;
         let scales = vb.get(0, &format!("{}.scales", name))?;
         let g_idx = vb.get(0, &format!("{}.g_idx", name)).ok();
 
-        Ok(AwqLinear::new(qweight, qzeros, scales, g_idx, None, self.group_size))
+        Ok(AwqLinear::new(
+            qweight,
+            qzeros,
+            scales,
+            g_idx,
+            None,
+            self.group_size,
+        ))
     }
 
     fn collect_safetensors(&self) -> AResult<Vec<std::path::PathBuf>> {
@@ -161,10 +177,17 @@ impl AwqLoader {
                     files.push(path);
                 }
             }
-        } else if self.model_path.extension().is_some_and(|ext| ext == "safetensors") {
+        } else if self
+            .model_path
+            .extension()
+            .is_some_and(|ext| ext == "safetensors")
+        {
             files.push(self.model_path.clone());
         } else {
-            return Err(anyhow::anyhow!("No .safetensors files found at {:?}", self.model_path));
+            return Err(anyhow::anyhow!(
+                "No .safetensors files found at {:?}",
+                self.model_path
+            ));
         }
         Ok(files)
     }
@@ -192,7 +215,7 @@ mod tests {
         let inp = 16;
         let qweight = Tensor::zeros((out, inp / 8), DType::I32, &device).unwrap();
         let num_groups = inp / 128 + 1;
-        let qzeros = Tensor::zeros((out, (num_groups + 7) / 8), DType::I32, &device).unwrap();
+        let qzeros = Tensor::zeros((out, num_groups.div_ceil(8)), DType::I32, &device).unwrap();
         let scales = Tensor::ones((out, num_groups), DType::F32, &device).unwrap();
         let awq = AwqLinear::new(qweight, qzeros, scales, None, None, 128);
         assert_eq!(awq.qweight.dims(), &[4, 2]);
