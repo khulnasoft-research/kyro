@@ -82,9 +82,13 @@ impl LlamaAttention {
             let ctx_len = ctx.manager.get_context_len(rid);
             if seq_len == 1 && ctx_len > seq_len {
                 // Decode step: use cached K/V + new K/V for attention
-                let cached_k = ctx.manager.get_cached_key(rid)
+                let cached_k = ctx
+                    .manager
+                    .get_cached_key(rid)
                     .ok_or_else(|| candle_core::Error::Msg("cached key missing".into()))?;
-                let cached_v = ctx.manager.get_cached_value(rid)
+                let cached_v = ctx
+                    .manager
+                    .get_cached_value(rid)
                     .ok_or_else(|| candle_core::Error::Msg("cached value missing".into()))?;
                 (cached_k, cached_v)
             } else {
@@ -199,10 +203,11 @@ impl LlamaDecoderLayer {
         &self,
         x: &Tensor,
         index: usize,
-        mut cache: Option<&mut CacheContext>,
+        #[allow(unused_mut)] mut cache: Option<&mut CacheContext>,
     ) -> Result<Tensor> {
         let residual = x;
         let x = self.input_layernorm.forward(x)?;
+        #[allow(clippy::needless_option_as_deref)]
         let x = (self.self_attn.forward(&x, index, cache.as_deref_mut())? + residual)?;
         let residual = &x;
         let x = self.post_attention_layernorm.forward(&x)?;

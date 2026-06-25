@@ -19,7 +19,12 @@ pub struct Qwen2Attention {
 }
 
 impl Qwen2Attention {
-    pub fn new(cfg: &LlamaConfig, vb: VarBuilder, device: &Device, _dist: Arc<DistributedContext>) -> Result<Self> {
+    pub fn new(
+        cfg: &LlamaConfig,
+        vb: VarBuilder,
+        device: &Device,
+        _dist: Arc<DistributedContext>,
+    ) -> Result<Self> {
         let world_size = _dist.world_size as usize;
         let head_dim = cfg.hidden_size / cfg.num_attention_heads;
         let n_heads = cfg.num_attention_heads / world_size;
@@ -32,10 +37,24 @@ impl Qwen2Attention {
 
         let rope = RotaryEmbedding::new(head_dim, cfg.max_seq_len.unwrap_or(32768), device)?;
 
-        Ok(Self { q_proj, k_proj, v_proj, o_proj, rope, n_heads, n_kv_heads, head_dim })
+        Ok(Self {
+            q_proj,
+            k_proj,
+            v_proj,
+            o_proj,
+            rope,
+            n_heads,
+            n_kv_heads,
+            head_dim,
+        })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize, mut cache: Option<&mut CacheContext>) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let (b_sz, seq_len, _) = x.dims3()?;
         let q = self.q_proj.forward(x)?;
         let k = self.k_proj.forward(x)?;
@@ -53,9 +72,13 @@ impl Qwen2Attention {
             ctx.manager.append_kv(rid, &k, &v)?;
             let ctx_len = ctx.manager.get_context_len(rid);
             if seq_len == 1 && ctx_len > seq_len {
-                let cached_k = ctx.manager.get_cached_key(rid)
+                let cached_k = ctx
+                    .manager
+                    .get_cached_key(rid)
                     .ok_or_else(|| candle_core::Error::Msg("cached key missing".into()))?;
-                let cached_v = ctx.manager.get_cached_value(rid)
+                let cached_v = ctx
+                    .manager
+                    .get_cached_value(rid)
                     .ok_or_else(|| candle_core::Error::Msg("cached value missing".into()))?;
                 (cached_k, cached_v)
             } else {
@@ -102,10 +125,16 @@ pub struct Qwen2MLP {
 
 impl Qwen2MLP {
     pub fn new(cfg: &LlamaConfig, vb: VarBuilder) -> Result<Self> {
-        let gate_proj = candle_nn::linear(cfg.hidden_size, cfg.intermediate_size, vb.pp("gate_proj"))?;
+        let gate_proj =
+            candle_nn::linear(cfg.hidden_size, cfg.intermediate_size, vb.pp("gate_proj"))?;
         let up_proj = candle_nn::linear(cfg.hidden_size, cfg.intermediate_size, vb.pp("up_proj"))?;
-        let down_proj = candle_nn::linear(cfg.intermediate_size, cfg.hidden_size, vb.pp("down_proj"))?;
-        Ok(Self { gate_proj, up_proj, down_proj })
+        let down_proj =
+            candle_nn::linear(cfg.intermediate_size, cfg.hidden_size, vb.pp("down_proj"))?;
+        Ok(Self {
+            gate_proj,
+            up_proj,
+            down_proj,
+        })
     }
 
     pub fn forward(&self, x: &Tensor) -> Result<Tensor> {
@@ -122,15 +151,35 @@ pub struct Qwen2DecoderLayer {
 }
 
 impl Qwen2DecoderLayer {
-    pub fn new(cfg: &LlamaConfig, vb: VarBuilder, device: &Device, dist: Arc<DistributedContext>) -> Result<Self> {
+    pub fn new(
+        cfg: &LlamaConfig,
+        vb: VarBuilder,
+        device: &Device,
+        dist: Arc<DistributedContext>,
+    ) -> Result<Self> {
         let self_attn = Qwen2Attention::new(cfg, vb.pp("self_attn"), device, dist)?;
         let mlp = Qwen2MLP::new(cfg, vb.pp("mlp"))?;
-        let input_layernorm = RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, vb.pp("input_layernorm"))?;
-        let post_attention_layernorm = RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, vb.pp("post_attention_layernorm"))?;
-        Ok(Self { self_attn, mlp, input_layernorm, post_attention_layernorm })
+        let input_layernorm =
+            RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, vb.pp("input_layernorm"))?;
+        let post_attention_layernorm = RmsNorm::new(
+            cfg.hidden_size,
+            cfg.rms_norm_eps,
+            vb.pp("post_attention_layernorm"),
+        )?;
+        Ok(Self {
+            self_attn,
+            mlp,
+            input_layernorm,
+            post_attention_layernorm,
+        })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize, cache: Option<&mut CacheContext>) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let residual = x;
         let x = self.input_layernorm.forward(x)?;
         let x = (self.self_attn.forward(&x, index, cache)? + residual)?;
@@ -146,13 +195,24 @@ pub struct Qwen2Model {
     layers: Vec<Qwen2DecoderLayer>,
     norm: Option<RmsNorm>,
     lm_head: Option<Linear>,
+    #[allow(dead_code)]
     pipeline_ctx: PipelineContext,
 }
 
 impl Qwen2Model {
-    pub fn new(cfg: &LlamaConfig, vb: VarBuilder, device: &Device, dist: Arc<DistributedContext>, pipeline_ctx: PipelineContext) -> Result<Self> {
+    pub fn new(
+        cfg: &LlamaConfig,
+        vb: VarBuilder,
+        device: &Device,
+        dist: Arc<DistributedContext>,
+        pipeline_ctx: PipelineContext,
+    ) -> Result<Self> {
         let embed_tokens = if pipeline_ctx.is_first_stage() {
-            Some(candle_nn::embedding(cfg.vocab_size, cfg.hidden_size, vb.pp("model.embed_tokens"))?)
+            Some(candle_nn::embedding(
+                cfg.vocab_size,
+                cfg.hidden_size,
+                vb.pp("model.embed_tokens"),
+            )?)
         } else {
             None
         };
@@ -160,25 +220,49 @@ impl Qwen2Model {
         let mut layers = Vec::new();
         let vb_l = vb.pp("model.layers");
         for layer_idx in pipeline_ctx.start_layer..pipeline_ctx.end_layer {
-            layers.push(Qwen2DecoderLayer::new(cfg, vb_l.pp(layer_idx), device, dist.clone())?);
+            layers.push(Qwen2DecoderLayer::new(
+                cfg,
+                vb_l.pp(layer_idx),
+                device,
+                dist.clone(),
+            )?);
         }
 
         let norm = if pipeline_ctx.is_last_stage() {
-            Some(RmsNorm::new(cfg.hidden_size, cfg.rms_norm_eps, vb.pp("model.norm"))?)
+            Some(RmsNorm::new(
+                cfg.hidden_size,
+                cfg.rms_norm_eps,
+                vb.pp("model.norm"),
+            )?)
         } else {
             None
         };
 
         let lm_head = if pipeline_ctx.is_last_stage() {
-            Some(candle_nn::linear(cfg.hidden_size, cfg.vocab_size, vb.pp("lm_head"))?)
+            Some(candle_nn::linear(
+                cfg.hidden_size,
+                cfg.vocab_size,
+                vb.pp("lm_head"),
+            )?)
         } else {
             None
         };
 
-        Ok(Self { embed_tokens, layers, norm, lm_head, pipeline_ctx })
+        Ok(Self {
+            embed_tokens,
+            layers,
+            norm,
+            lm_head,
+            pipeline_ctx,
+        })
     }
 
-    pub fn forward(&self, x: &Tensor, index: usize, mut cache: Option<&mut CacheContext>) -> Result<Tensor> {
+    pub fn forward(
+        &self,
+        x: &Tensor,
+        index: usize,
+        mut cache: Option<&mut CacheContext>,
+    ) -> Result<Tensor> {
         let mut x = x.clone();
         if let Some(embed) = &self.embed_tokens {
             x = embed.forward(&x)?;

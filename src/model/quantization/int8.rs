@@ -11,7 +11,11 @@ pub struct Int8Linear {
 impl Int8Linear {
     #[allow(dead_code)]
     pub fn new(weight: Tensor, scale: Tensor, bias: Option<Tensor>) -> Self {
-        Self { weight, scale, bias }
+        Self {
+            weight,
+            scale,
+            bias,
+        }
     }
 
     /// Per-tensor INT8 quantization (symmetric).
@@ -28,10 +32,7 @@ impl Int8Linear {
 
         let quantized: Vec<u8> = weight_data
             .iter()
-            .map(|&v| {
-                let q = ((v / scale) + 128.0).round().clamp(0.0, 255.0) as u8;
-                q
-            })
+            .map(|&v| ((v / scale) + 128.0).round().clamp(0.0, 255.0) as u8)
             .collect();
 
         let qweight = Tensor::from_slice(&quantized, dims, device)?;
@@ -83,11 +84,16 @@ mod tests {
         let reconstructed = reconstructed_f16.to_dtype(DType::F32)?;
         let weight_v: Vec<f32> = weight.flatten_all()?.to_vec1()?;
         let recon_v: Vec<f32> = reconstructed.flatten_all()?.to_vec1()?;
-        let total_err: f32 = weight_v.iter()
+        let total_err: f32 = weight_v
+            .iter()
             .zip(recon_v.iter())
             .map(|(a, b)| (a - b).abs())
             .sum();
-        assert!(total_err < 2.0, "quantization error too large: {}", total_err);
+        assert!(
+            total_err < 2.0,
+            "quantization error too large: {}",
+            total_err
+        );
         Ok(())
     }
 

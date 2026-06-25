@@ -22,6 +22,7 @@ pub struct Request {
     /// Stop sequences as token IDs (converted from text when tokenizer is available).
     pub stop_token_ids: Vec<Vec<u32>>,
     /// Best-of: generate this many completions and return the best.
+    #[allow(dead_code)]
     pub best_of: usize,
     pub seed: Option<u64>,
     /// Channel to send newly generated tokens back to the API for streaming.
