@@ -149,7 +149,14 @@ impl ModelLoader {
         );
 
         let architecture = self.hf_architecture.clone();
-        let model = ModelInstance::from_architecture(&architecture, config, vb, device, dist, pipeline_ctx)?;
+        let model = ModelInstance::from_architecture(
+            &architecture,
+            config,
+            vb,
+            device,
+            dist,
+            pipeline_ctx,
+        )?;
         Ok(LoadedModel::Standard(model))
     }
 }
