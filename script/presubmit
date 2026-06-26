@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#
+# Presubmit script: run all checks before committing/pushing.
+# Usage: ./script/presubmit [--quick]
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+quick=false
+
+while (($#)); do
+  case "$1" in
+    --quick) quick=true ;;
+    --help | -h)
+      echo "Usage: $0 [--quick]"
+      echo "  --quick  Skip cargo audit (fast path)"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--quick]"
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+header() {
+  echo "--- $1"
+}
+
+error_count=0
+
+header "cargo fmt (check)"
+if ! ./script/format --check; then
+  echo "FAIL: run ./script/format to fix formatting"
+  ((error_count++))
+fi
+
+header "cargo clippy"
+if ! cargo clippy --all-targets -- -D warnings 2>/dev/null; then
+  echo "FAIL: clippy found issues"
+  ((error_count++))
+fi
+
+header "cargo check"
+if ! cargo check 2>/dev/null; then
+  echo "FAIL: compilation errors"
+  ((error_count++))
+fi
+
+header "cargo test"
+if ! cargo test 2>/dev/null; then
+  echo "FAIL: tests failed"
+  ((error_count++))
+fi
+
+if ! $quick; then
+  header "cargo audit"
+  if ! cargo audit 2>/dev/null; then
+    echo "FAIL: security vulnerabilities found"
+    ((error_count++))
+  fi
+fi
+
+echo ""
+if ((error_count > 0)); then
+  echo "FAILED: $error_count check(s) failed"
+  exit 1
+else
+  echo "All checks passed"
+fi
