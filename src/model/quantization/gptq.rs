@@ -46,7 +46,13 @@ impl GptqLoader {
             vb.get(0, &n).ok()
         };
 
-        Ok(Int4Linear::new(qweight, scales, qzeros, None, self.group_size))
+        Ok(Int4Linear::new(
+            qweight,
+            scales,
+            qzeros,
+            None,
+            self.group_size,
+        ))
     }
 
     fn collect_safetensors(&self) -> Result<Vec<std::path::PathBuf>> {
@@ -60,10 +66,17 @@ impl GptqLoader {
                     files.push(path);
                 }
             }
-        } else if self.model_path.extension().is_some_and(|ext| ext == "safetensors") {
+        } else if self
+            .model_path
+            .extension()
+            .is_some_and(|ext| ext == "safetensors")
+        {
             files.push(self.model_path.clone());
         } else {
-            return Err(anyhow::anyhow!("No .safetensors files found at {:?}", self.model_path));
+            return Err(anyhow::anyhow!(
+                "No .safetensors files found at {:?}",
+                self.model_path
+            ));
         }
         Ok(files)
     }

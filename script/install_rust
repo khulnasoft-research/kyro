@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Script to install Rust for CI.
+#
+# Usage: ./script/install_rust [toolchain]
+#   toolchain  Rust toolchain to install (default: stable)
+
+set -euo pipefail
+
+toolchain="${1:-stable}"
+
+red="\033[0;31m"
+reset="\033[0m"
+
+install_rust() {
+  echo "Installing Rust ($toolchain)..."
+
+  # Include a minimal set of useful components.
+  RUSTUP_INIT_SKIP_PATH_CHECK=yes \
+    rustup-init -y --no-modify-path --default-toolchain "$toolchain" \
+      --component rustfmt,clippy 2>/dev/null
+
+  # Add cargo to PATH for the current session without relying on env file.
+  export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+  export PATH="$CARGO_HOME/bin:$PATH"
+
+  if ! command -v cargo &>/dev/null; then
+    echo -e "${red}Failed to install Rust. Please install it manually: https://rustup.rs${reset}"
+    exit 1
+  fi
+}
+
+if ! command -v cargo &>/dev/null; then
+  install_rust
+else
+  # If a non-default toolchain is requested and not installed, fetch it.
+  if [[ "$toolchain" != "stable" ]] && ! rustup toolchain list | grep -qF "$toolchain"; then
+    rustup toolchain install "$toolchain" --component rustfmt,clippy
+  fi
+fi
