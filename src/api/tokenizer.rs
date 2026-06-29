@@ -1,4 +1,5 @@
 use std::path::Path;
+
 use tokenizers::Tokenizer;
 
 pub struct LuminaTokenizer {

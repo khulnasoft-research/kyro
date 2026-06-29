@@ -1,8 +1,10 @@
-use crate::model::kv_cache::CacheContext;
-use crate::model::loader::{LoadedModel, ModelForward};
+use std::collections::HashMap;
+
 use candle_core::{Result, Tensor};
 use candle_nn::ops::log_softmax;
-use std::collections::HashMap;
+
+use crate::model::kv_cache::CacheContext;
+use crate::model::loader::{LoadedModel, ModelForward};
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -353,11 +355,12 @@ impl SpeculativeDecoder {
 
 #[cfg(test)]
 mod tests {
+    use candle_core::{DType, Device};
+
     use super::*;
     use crate::model::config::LlamaConfig;
     use crate::model::llama::LlamaModel;
     use crate::model::model_registry::ModelInstance;
-    use candle_core::{DType, Device};
 
     fn make_dummy_decoder(lookahead: usize) -> SpeculativeDecoder {
         let cfg = LlamaConfig::llama_7b();

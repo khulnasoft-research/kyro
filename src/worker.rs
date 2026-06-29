@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
+use candle_core::{Device, Result, Tensor};
+use rand::Rng;
+use tokio::sync::{Notify, RwLock};
+
+use crate::api::grammar::GrammarLogitsProcessor;
 use crate::metrics::EngineMetrics;
 use crate::model::kv_cache::{CacheContext, KVCacheManager};
 use crate::model::loader::ModelForward;
 use crate::scheduler::continuous_batching::Scheduler;
-use candle_core::{Device, Result, Tensor};
-use rand::Rng;
-use std::sync::Arc;
-use tokio::sync::{Notify, RwLock};
 
 pub struct Worker {
     pub model: Box<dyn ModelForward + Send>,
@@ -74,6 +77,7 @@ impl Worker {
                                 is_prefill: true,
                                 needs_cache_lookup: chunk_start == 0,
                                 seed: req.seed,
+                                grammar_processor: req.grammar_processor.clone(),
                             });
                         } else if req.cached_prefix_len == req.prompt_tokens.len() {
                             let last_token = req.prompt_tokens.last().copied().unwrap_or(0);
@@ -90,6 +94,7 @@ impl Worker {
                                 is_prefill: true,
                                 needs_cache_lookup: false,
                                 seed: req.seed,
+                                grammar_processor: req.grammar_processor.clone(),
                             });
                         }
                     }
@@ -111,6 +116,7 @@ impl Worker {
                             is_prefill: false,
                             needs_cache_lookup: false,
                             seed: req.seed,
+                            grammar_processor: req.grammar_processor.clone(),
                         });
                     }
                 }
@@ -174,6 +180,14 @@ impl Worker {
                         logits = (&logits + &mask.unsqueeze(0)?)?;
                     }
                 }
+
+                // Apply grammar mask for constrained/structured decoding
+                let logits = if let Some(ref mut proc) = item.grammar_processor.clone() {
+                    let vocab_size = logits.dim(logits.dims().len() - 1)?;
+                    proc.apply_grammar_mask(&logits, vocab_size)?
+                } else {
+                    logits
+                };
 
                 let logits_ref = &logits;
                 let next_token = if !logits_ref.dims().is_empty() && logits_ref.dims()[0] > 0 {
@@ -361,6 +375,7 @@ struct WorkItem {
     needs_cache_lookup: bool,
     #[allow(dead_code)]
     seed: Option<u64>,
+    grammar_processor: Option<GrammarLogitsProcessor>,
 }
 
 struct ComputeResult {
@@ -373,8 +388,9 @@ struct ComputeResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_sample_argmax_with_zero_temp() {

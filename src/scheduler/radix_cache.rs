@@ -1,6 +1,7 @@
-use crate::scheduler::block_manager::BlockId;
 use std::collections::HashMap;
 use std::time::Instant;
+
+use crate::scheduler::block_manager::BlockId;
 
 #[derive(Debug)]
 struct RadixNode {

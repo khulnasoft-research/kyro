@@ -1,7 +1,9 @@
-use crate::model::kv_cache::CacheContext;
+use std::path::Path;
+
 use candle_core::{Device, Result, Tensor};
 use candle_transformers::models::quantized_llama::ModelWeights;
-use std::path::Path;
+
+use crate::model::kv_cache::CacheContext;
 
 #[allow(dead_code)]
 pub struct QuantizedLlama {

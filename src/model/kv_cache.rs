@@ -1,5 +1,6 @@
-use candle_core::{Result, Tensor};
 use std::collections::HashMap;
+
+use candle_core::{Result, Tensor};
 
 pub struct RequestKVCache {
     pub key_tensor: Option<Tensor>,
@@ -111,8 +112,9 @@ impl<'a> CacheContext<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_kv_cache_create_and_register() {

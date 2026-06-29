@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
+use candle_core::{Device, Result, Tensor};
+
 use crate::model::kv_cache::CacheContext;
 use crate::model::loader::ModelForward;
-use candle_core::{Device, Result, Tensor};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionMode {

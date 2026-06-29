@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use prometheus::{Counter, Gauge, Histogram, Registry};
-use std::sync::Arc;
 
 pub struct EngineMetrics {
     #[allow(dead_code)]

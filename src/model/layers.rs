@@ -63,9 +63,10 @@ impl RotaryEmbedding {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
     use candle_nn::VarBuilder;
+
+    use super::*;
 
     #[test]
     fn test_rms_norm_forward_shape() {

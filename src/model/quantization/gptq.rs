@@ -1,8 +1,10 @@
-use crate::model::quantization::int4::Int4Linear;
+use std::path::Path;
+
 use anyhow::Result;
 use candle_core::{DType, Device};
 use candle_nn::VarBuilder;
-use std::path::Path;
+
+use crate::model::quantization::int4::Int4Linear;
 
 /// Loads a GPTQ-quantized model from safetensors files.
 /// GPTQ uses INT4 group-wise quantization with scales and zeros.

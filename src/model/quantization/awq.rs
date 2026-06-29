@@ -1,7 +1,8 @@
+use std::path::Path;
+
 use anyhow::Result as AResult;
 use candle_core::{DType, Device, Result, Tensor};
 use candle_nn::VarBuilder;
-use std::path::Path;
 
 use super::QuantizedLayer;
 
@@ -195,8 +196,9 @@ impl AwqLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_unpack_i32_word() {
