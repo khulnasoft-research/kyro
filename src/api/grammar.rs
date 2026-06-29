@@ -1,7 +1,8 @@
-use candle_core::{Result, Tensor};
 use std::collections::HashSet;
 
-#[derive(Default)]
+use candle_core::{Result, Tensor};
+
+#[derive(Clone, Default)]
 #[allow(dead_code)]
 pub enum GrammarConstraint {
     #[default]
@@ -10,13 +11,14 @@ pub enum GrammarConstraint {
     Regex(String),
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct GrammarState {
     #[allow(dead_code)]
     pub stack: Vec<String>,
     pub current_text: String,
 }
 
+#[derive(Clone)]
 pub struct GrammarLogitsProcessor {
     #[allow(dead_code)]
     pub constraint: GrammarConstraint,
@@ -63,8 +65,9 @@ impl GrammarLogitsProcessor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::{DType, Device};
+
+    use super::*;
 
     #[test]
     fn test_no_constraint_allows_all_tokens() {

@@ -1,5 +1,6 @@
-use super::QuantizedLayer;
 use candle_core::{DType, Result, Tensor};
+
+use super::QuantizedLayer;
 
 #[allow(dead_code)]
 pub struct Int8Linear {
@@ -68,8 +69,9 @@ impl QuantizedLayer for Int8Linear {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_int8_quantize_roundtrip() -> std::result::Result<(), Box<dyn std::error::Error>> {

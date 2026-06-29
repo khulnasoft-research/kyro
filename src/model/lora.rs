@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use candle_core::{Result, Tensor};
 use candle_nn::{Linear, Module};
-use std::collections::HashMap;
 
 #[allow(dead_code)]
 pub struct LoraAdapter {

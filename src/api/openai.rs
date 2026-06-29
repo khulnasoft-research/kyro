@@ -1,18 +1,18 @@
-use crate::api::tokenizer::LuminaTokenizer;
-use crate::scheduler::continuous_batching::{Request, Scheduler};
-use axum::{
-    extract::State,
-    response::{
-        sse::{Event, Sse},
-        IntoResponse,
-    },
-    routing::{get, post},
-    Json, Router,
-};
+use std::convert::Infallible;
+use std::sync::Arc;
+
+use axum::extract::State;
+use axum::response::sse::{Event, Sse};
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, sync::Arc};
 use tokio::sync::{Notify, RwLock};
 use tracing::Span;
+
+use crate::api::grammar::{GrammarConstraint, GrammarLogitsProcessor};
+use crate::api::tokenizer::LuminaTokenizer;
+use crate::scheduler::continuous_batching::{Request, Scheduler};
 
 pub struct AppState {
     pub scheduler: Arc<RwLock<Scheduler>>,
@@ -54,6 +54,14 @@ pub struct ChatCompletionRequest {
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
     pub seed: Option<u64>,
+    #[serde(default)]
+    pub response_format: Option<ResponseFormat>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResponseFormat {
+    #[serde(rename = "type")]
+    pub format_type: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -281,13 +289,26 @@ pub async fn chat_completions(
     };
     let stop_token_ids = stop_strings
         .iter()
-        .filter_map(|s| state.tokenizer.as_ref().map(|tk| tk.encode(s).unwrap_or_default()))
+        .filter_map(|s| {
+            state
+                .tokenizer
+                .as_ref()
+                .map(|tk| tk.encode(s).unwrap_or_default())
+        })
         .filter(|tokens| !tokens.is_empty())
         .collect();
 
     let created = unix_now();
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u32>();
+
+    let grammar_processor = payload
+        .response_format
+        .and_then(|rf| match rf.format_type.as_str() {
+            "json_object" => Some(GrammarLogitsProcessor::new(GrammarConstraint::Json)),
+            "json" => Some(GrammarLogitsProcessor::new(GrammarConstraint::Json)),
+            _ => None,
+        });
 
     let request = Request {
         id: request_id,
@@ -308,7 +329,7 @@ pub async fn chat_completions(
         seed,
         token_sender: Some(tx),
         deadline: Some(tokio::time::Instant::now() + tokio::time::Duration::from_secs(300)),
-        grammar_processor: None,
+        grammar_processor,
     };
 
     // Add request to scheduler

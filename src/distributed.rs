@@ -117,8 +117,9 @@ impl Default for DistributedContext {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_new_returns_single_node() {

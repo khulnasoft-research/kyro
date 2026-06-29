@@ -18,8 +18,8 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.9"
-prometheus = "0.13"
-tokenizers = "0.13"
+prometheus = "0.14"
+tokenizers = { version = "0.13", default-features = false, features = ["onig"] }
 futures = "0.3"
 async-stream = "0.3"
 cudarc = { version = "0.9", optional = true }

@@ -1,5 +1,6 @@
-use crate::scheduler::radix_cache::RadixCache;
 use std::collections::HashMap;
+
+use crate::scheduler::radix_cache::RadixCache;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(pub usize);

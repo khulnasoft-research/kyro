@@ -1,5 +1,6 @@
-use super::{pack_i4, unpack_i4, QuantizedLayer};
 use candle_core::{DType, Result, Tensor};
+
+use super::{pack_i4, unpack_i4, QuantizedLayer};
 
 #[allow(dead_code)]
 pub struct Int4Linear {
@@ -150,8 +151,9 @@ impl QuantizedLayer for Int4Linear {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     #[test]
     fn test_int4_quantize_roundtrip() -> std::result::Result<(), Box<dyn std::error::Error>> {

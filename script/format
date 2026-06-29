@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# Script to format (Rust) code.
+# Usage: ./script/format [--check]
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+check=false
+
+while (($#)); do
+  case "$1" in
+    --check) check=true ;;
+    --help | -h)
+      echo "Usage: $0 [--check]"
+      echo "  --check  Check formatting without modifying files"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--check]"
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if ! command -v rustfmt &>/dev/null; then
+  echo "Error: rustfmt not found. Install it with: rustup component add rustfmt"
+  exit 1
+fi
+
+FMT_ARGS=(--config imports_granularity=Module --config group_imports=StdExternalCrate)
+if $check; then
+  FMT_ARGS+=(--check)
+fi
+
+RUSTC_BOOTSTRAP=1 cargo fmt -- "${FMT_ARGS[@]}"

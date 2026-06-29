@@ -1,12 +1,14 @@
+use std::path::Path;
+
+use anyhow::Context;
+use candle_core::{Device, Result, Tensor};
+
 use crate::distributed::DistributedContext;
 use crate::model::config::{HfModelConfig, LlamaConfig, ModelArchitecture};
 use crate::model::kv_cache::CacheContext;
 use crate::model::model_registry::ModelInstance;
 use crate::model::pipeline::PipelineContext;
 use crate::model::quantized::QuantizedLlama;
-use anyhow::Context;
-use candle_core::{Device, Result, Tensor};
-use std::path::Path;
 
 pub trait ModelForward: Send {
     fn forward(
@@ -149,16 +151,25 @@ impl ModelLoader {
         );
 
         let architecture = self.hf_architecture.clone();
-        let model = ModelInstance::from_architecture(&architecture, config, vb, device, dist, pipeline_ctx)?;
+        let model = ModelInstance::from_architecture(
+            &architecture,
+            config,
+            vb,
+            device,
+            dist,
+            pipeline_ctx,
+        )?;
         Ok(LoadedModel::Standard(model))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
+
     use tempfile::TempDir;
+
+    use super::*;
 
     fn write_dummy_config(dir: &TempDir) {
         let config = serde_json::json!({
