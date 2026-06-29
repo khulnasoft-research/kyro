@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
+use candle_core::{Device, Result, Tensor};
+use candle_nn::{Linear, Module, VarBuilder};
+
 use crate::distributed::DistributedContext;
 use crate::model::config::LlamaConfig;
 use crate::model::kv_cache::CacheContext;
 use crate::model::layers::{RmsNorm, RotaryEmbedding};
 use crate::model::pipeline::PipelineContext;
-use candle_core::{Device, Result, Tensor};
-use candle_nn::{Linear, Module, VarBuilder};
-use std::sync::Arc;
 
 pub struct Qwen2Attention {
     q_proj: Linear,

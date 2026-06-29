@@ -1,6 +1,7 @@
+use std::path::Path;
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LlamaConfig {

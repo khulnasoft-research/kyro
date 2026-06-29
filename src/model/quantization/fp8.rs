@@ -1,5 +1,6 @@
-use super::QuantizedLayer;
 use candle_core::{DType, Result, Tensor};
+
+use super::QuantizedLayer;
 
 #[allow(dead_code)]
 pub struct Fp8Linear {

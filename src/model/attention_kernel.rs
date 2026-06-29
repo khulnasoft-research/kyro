@@ -138,8 +138,9 @@ impl PagedAttention {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use candle_core::Device;
+
+    use super::*;
 
     fn make_attention(
         block_size: usize,

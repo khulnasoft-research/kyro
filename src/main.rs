@@ -8,6 +8,14 @@ mod scheduler;
 mod speculative;
 mod worker;
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
+use tokio::sync::{Notify, RwLock};
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
+
 use crate::api::tokenizer::LuminaTokenizer;
 use crate::config::Cli;
 use crate::distributed::DistributedContext;
@@ -17,12 +25,6 @@ use crate::model::model_registry::ModelInstance;
 use crate::scheduler::block_manager::BlockManager;
 use crate::scheduler::continuous_batching::Scheduler;
 use crate::worker::Worker;
-use anyhow::{Context, Result};
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::{Notify, RwLock};
-use tracing::{info, Level};
-use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {

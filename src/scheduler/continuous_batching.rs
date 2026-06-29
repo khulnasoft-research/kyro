@@ -1,6 +1,8 @@
-use crate::scheduler::block_manager::BlockManager;
 use std::collections::VecDeque;
+
 use tokio::time::Instant;
+
+use crate::scheduler::block_manager::BlockManager;
 
 pub struct Request {
     pub id: u64,

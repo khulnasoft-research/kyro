@@ -1,3 +1,8 @@
+use std::sync::Arc;
+
+use candle_core::{Device, Result, Tensor};
+use candle_nn::VarBuilder;
+
 use crate::distributed::DistributedContext;
 use crate::model::config::{LlamaConfig, ModelArchitecture};
 use crate::model::kv_cache::CacheContext;
@@ -5,9 +10,6 @@ use crate::model::llama::LlamaModel;
 use crate::model::loader::ModelForward;
 use crate::model::pipeline::PipelineContext;
 use crate::model::qwen::Qwen2Model;
-use candle_core::{Device, Result, Tensor};
-use candle_nn::VarBuilder;
-use std::sync::Arc;
 
 pub enum ModelInstance {
     Llama(LlamaModel),
